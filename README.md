@@ -20,12 +20,14 @@ If this work is useful to you, please cite our paper:
 }
 ```
 
+**Code and pretrained models for monocular depth estimation are coming soon!**
+
 ## Table of Contents
 1. [Setting up your virtual environment](#setting-up-virtual-environment)
 2. [Setting up your datasets](#setting-up-datasets)
 3. [Downloading and running pretrained models](#downloading-running-pretrained-models)
-4. [Training with AugUndo](training-with-augundo)
-5. [Adding your own models to AugUndo](adding-models-to-augundo)
+4. [Training with AugUndo](#training-with-augundo)
+5. [Adding your own models to AugUndo](#adding-models-to-augundo)
 6. [Related projects](#related-projects)
 7. [License and disclaimer](#license-disclaimer)
 
@@ -306,11 +308,16 @@ If you would like to create your own custom dataset. We recommend following the 
 We provide pretrained models for KBNet, FusionNet (with ScaffNet), and VOICED for monocular depth completion and Monodepth2, HRDepth, and LiteMono for monocular depth estimation. Models are pretrained on KITTI for outdoors and VOID for indoors.
 
 ### Downloading pretrained models
-To use our pretrained models, you can download them from One Drive using the following command
-```
-wget -O pretrained_models.zip ' &download=1'
 
+To use our pretrained models trained on KITTI and VOID models, you can download them from Google Drive
+```
+gdown https://drive.google.com/uc?id=1QswQO_W-AhqIEjWPpjG21OboVuW0iQ5o
 unzip pretrained_models.zip
+```
+
+Note: `gdown` fails intermittently and complains about permission. If that happens, you may also download the models via:
+```
+https://drive.google.com/file/d/1QswQO_W-AhqIEjWPpjG21OboVuW0iQ5o/view?usp=sharing
 ```
 
 Once you unzip the file, you will find a directory called `pretrained_models` containing the following file structure:
@@ -338,6 +345,8 @@ pretrained_models
     |-- monodepth2
         ...
 ```
+
+**AugUndo pretrained models for monocular depth estimation are coming soon!**
 
 ### Running pretrained models
 
