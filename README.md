@@ -3,6 +3,8 @@ PyTorch Implementation of AugUndo: Scaling Up Augmentations for Monocular Depth 
 
 Published in the European Conference on Computer Vision (ECCV) 2024
 
+[[arxiv]](https://arxiv.org/pdf/2310.09739) [[publication]](https://link.springer.com/chapter/10.1007/978-3-031-73039-9_16)
+
 Authors: [Yangchao Wu](https://www.linkedin.com/in/yangchaowu/), [Tian Yu Liu](http://web.cs.ucla.edu/~tianyu), [Hyoungseob Park](https://vision.cs.yale.edu/members/hyoungseob-park.html), [Stefano Soatto](https://web.cs.ucla.edu/~soatto/), [Dong Lao](https://www.linkedin.com/in/dong-lao-97b338b0/), [Alex Wong](https://vision.cs.yale.edu/members/alex-wong.html)
 
 Model have been tested on Ubuntu 20.04 using Python 3.8 and PyTorch 1.11.0 (CUDA 11.1)
