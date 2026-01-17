@@ -81,17 +81,6 @@ class DepthCompletionModel(object):
                 min_predict_depth=min_predict_depth,
                 max_predict_depth=max_predict_depth,
                 device=device)
-
-        # add the pwc_disp model from UnOS
-        elif 'pwc' in model_name:
-            from external_src.stereo_model.pwc_models import PWCModel
-
-            self.model = PWCModel(
-                dataset_name=dataset_name,
-                network_modules=network_modules,
-                min_predict_depth=min_predict_depth,
-                max_predict_depth=max_predict_depth,
-                device=device)
         else:
             raise ValueError('Unsupported depth completion model: {}'.format(model_name))
 
