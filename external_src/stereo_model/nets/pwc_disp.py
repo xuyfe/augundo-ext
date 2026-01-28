@@ -5,6 +5,8 @@ import torch.nn.functional as F
 def leaky_relu(x):
     return F.leaky_relu(x, negative_slope=0.1)
 
+# since optical flow is 2d line search and stereo depth is 1d serach (since pixels can only move left/right)
+
 class FeaturePyramid(nn.Module):
     def __init__(self):
         super(FeaturePyramid, self).__init__()
@@ -78,10 +80,6 @@ def warp(x, flow):
 
     if x.is_cuda:
         grid = grid.cuda()
-    
-    # Scale flow if necessary? 
-    # Usually flow is in pixels. 
-    # The GridSample needs normalized coordinates [-1, 1]
     
     vgrid = grid + flow
 
@@ -166,7 +164,7 @@ class PWCDisp(nn.Module):
         # cv is 2*d + 1 = 9 channels.
         
         # Level 6
-        self.decoder6 = OpticalFlowDecoder(9) # Wait, cv6 only.
+        self.decoder6 = OpticalFlowDecoder(9)
         
         # Level 5: cv(9) + feat(128) + flow(2) = 139
         self.decoder5 = OpticalFlowDecoder(9 + 128 + 2)
