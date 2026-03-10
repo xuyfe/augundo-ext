@@ -1,12 +1,5 @@
-__pycache__/
-*.pyc
 data/
-results/
 testing/
-torchinductor_owenxuli/
 training/
-checkpoints/
 augundo-py310env/
-external_src/stereo_depth_completion/UnOS/optical_flow_toolkit/
-external_src/OpticalFlowToolkit/
-disparities.npy
+bash/.DS_Store
