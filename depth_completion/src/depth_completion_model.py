@@ -83,8 +83,8 @@ class DepthCompletionModel(object):
                 device=device)
 
         # add the pwc_disp model from UnOS
-        elif 'pwc' in model_name:
-            from external_src.stereo_model.pwc_models import PWCModel
+        elif 'pwc' in model_name or 'unos' in model_name:
+            from external_src.stereo_model.unos_model import PWCModel
 
             self.model = PWCModel(
                 dataset_name=dataset_name,
@@ -302,6 +302,11 @@ class DepthCompletionModel(object):
                 model_pose_restore_path=restore_paths[1] if len(restore_paths) > 1 else None,
                 optimizer_depth=optimizer_depth,
                 optimizer_pose=optimizer_pose)
+        elif 'pwc' in self.model_name or 'unos' in self.model_name:
+            train_step, optimizer_depth = self.model.restore_model(
+                restore_path=restore_paths[0] if restore_paths else None,
+                optimizer=optimizer_depth)
+            return train_step, optimizer_depth, optimizer_pose
         else:
             raise ValueError('Unsupported depth completion model: {}'.format(self.model_name))
 
@@ -352,6 +357,11 @@ class DepthCompletionModel(object):
                 optimizer_depth,
                 model_pose_checkpoint_path=os.path.join(checkpoint_dirpath, 'posenet-{}.pth'.format(step)),
                 optimizer_pose=optimizer_pose)
+        elif 'pwc' in self.model_name or 'unos' in self.model_name:
+            self.model.save_model(
+                os.path.join(checkpoint_dirpath, 'unos-{}.pth'.format(step)),
+                step,
+                optimizer_depth)
         else:
             raise ValueError('Unsupported depth completion model: {}'.format(self.model_name))
 

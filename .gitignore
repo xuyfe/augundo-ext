@@ -1,0 +1,6 @@
+augundo-py310env/
+data/
+testing/
+training/
+torchinductor_owenxuli/
+.DS_Store

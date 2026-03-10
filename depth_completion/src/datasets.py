@@ -31,6 +31,21 @@ def load_image_triplet(path, normalize=True, data_format='CHW'):
 
     return image1, image0, image2
 
+# new code begin
+def load_kitti_calib_intrinsics(calib_path):
+    '''
+    Load 3x3 intrinsics from KITTI calib_cam_to_cam.txt (UnOS-style).
+    Uses the last line of the file, 12 values, reshape to 3x4 and takes 3x3.
+    '''
+    with open(calib_path) as f:
+        lines = f.readlines()
+    last_line = lines[-1].strip().split()
+    # values after the key (e.g. "P_rect_02:")
+    values = np.array([float(x) for x in last_line[1:13]], dtype=np.float32)
+    P = values.reshape(3, 4)
+    return P[0:3, 0:3].astype(np.float32)
+# new code end
+
 def load_depth(depth_path, data_format='CHW'):
     '''
     Load depth
@@ -247,6 +262,76 @@ class DepthCompletionMonocularTrainingDataset(torch.utils.data.Dataset):
     def __len__(self):
         return self.n_sample
 
+# new code begin
+class DepthCompletionStereoTrainingDataset(torch.utils.data.Dataset):
+    '''
+    UnOS-style stereo dataset: left + right paths and calib path per sample.
+    Returns (stereo_6ch, stereo_6ch, stereo_6ch, sparse_dummy, intrinsics) so the
+    depth_completion training loop receives 6-channel input for PWCModel/UnOS.
+    '''
+
+    def __init__(self,
+                 images_paths,
+                 right_images_paths,
+                 intrinsics_paths,
+                 random_crop_shape=None,
+                 random_crop_type=None,
+                 data_format='CHW'):
+
+        self.n_sample = len(images_paths)
+        assert len(right_images_paths) == self.n_sample
+        assert len(intrinsics_paths) == self.n_sample
+
+        self.images_paths = images_paths
+        self.right_images_paths = right_images_paths
+        self.intrinsics_paths = intrinsics_paths
+        self.random_crop_shape = random_crop_shape
+        self.random_crop_type = random_crop_type
+        self.data_format = data_format
+        self.do_random_crop = (
+            random_crop_shape is not None
+            and all(x > 0 for x in random_crop_shape)
+        )
+
+    def __getitem__(self, index):
+        left = data_utils.load_image(
+            self.images_paths[index],
+            normalize=False,
+            data_format=self.data_format)
+        right = data_utils.load_image(
+            self.right_images_paths[index],
+            normalize=False,
+            data_format=self.data_format)
+        # left/right: CHW
+        stereo_6ch = np.concatenate([left, right], axis=0)
+
+        if self.intrinsics_paths[index].endswith('.txt'):
+            intrinsics = load_kitti_calib_intrinsics(self.intrinsics_paths[index])
+        else:
+            intrinsics = np.load(self.intrinsics_paths[index]).astype(np.float32)
+
+        if self.do_random_crop:
+            n_height, n_width = self.random_crop_shape
+            _, o_height, o_width = stereo_6ch.shape
+            d_height = o_height - n_height
+            d_width = o_width - n_width
+            y_start = d_height // 2
+            x_start = d_width // 2
+            if 'horizontal' in (self.random_crop_type or []):
+                x_start = np.random.randint(0, d_width + 1)
+            if 'bottom' in (self.random_crop_type or []):
+                y_start = d_height
+            stereo_6ch = stereo_6ch[:, y_start:y_start + n_height, x_start:x_start + n_width]
+            intrinsics = intrinsics + np.array(
+                [[0, 0, -x_start], [0, 0, -y_start], [0, 0, 0]], dtype=np.float32)
+
+        sparse_dummy = np.zeros((1, stereo_6ch.shape[1], stereo_6ch.shape[2]), dtype=np.float32)
+        stereo_6ch = stereo_6ch.astype(np.float32)
+        return stereo_6ch, stereo_6ch.copy(), stereo_6ch.copy(), sparse_dummy, intrinsics.astype(np.float32)
+
+    def __len__(self):
+        return self.n_sample
+# new code end
 
 class DepthCompletionSupervisedTrainingDataset(torch.utils.data.Dataset):
     '''

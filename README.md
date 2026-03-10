@@ -45,6 +45,19 @@ pip install -r requirements.txt
 pip install torch==1.10.0+cu111 torchvision==0.11.0+cu111 torchaudio==0.10.0 -f https://download.pytorch.org/whl/torch_stable.html
 ```
 
+Python 3.8 was not available to install directly from Brew, so I installed 3.10. Moreover, my MacBook is incompatible with CUDA, so I just downloaded the versions compatible with Python 3.10 and with MPS.
+
+```
+OWEN XU LI
+virtualenv -p /usr/bin/python3.10 augundo-py310env
+source augundo-py310env/bin/activate
+
+export TMPDIR=./
+
+pip install -r requirements.txt
+pip install torch torchvisiontorchaudio
+```
+
 ## Setting up your datasets <a name="setting-up-datasets"></a>
 
 For training datasets, we will use [KITTI][kitti_dataset] for outdoors and [VOID][void_github] for indoors. We will additionally use [NYUv2][nyu_v2_dataset], [ScanNet][scannet_dataset], and [Make3D][make3d_dataset] for evaluation. Below are instructions to run our setup script for each dataset. The setup script will (1) store images as sequential temporal triplets and (2) produce paths for training, validation and testing splits.
@@ -107,6 +120,11 @@ For more detailed instructions on downloading and using VOID and obtaining the r
 
 <details>
 <summary> <b> KITTI dataset </b> </summary>
+
+```
+OWEN XU LI
+Downloading the full KITTI dataset is too heavy for my computer, so I downloaded a small subset through small_setup_dataset_kitti.sh. I modified the code in setup_dataset_kitti.py to ignore all files from AWS3 that were not in the small sample size I downloaded.
+```
 
 The `bash/kitti/setup_dataset_kitti.sh` script will download and set up `kitti_raw_data` and `kitti_depth_completion` for you in your data folder.
 

@@ -1,0 +1,70 @@
+#!/bin/bash
+# Train UnOS (PWC-Disp) stereo depth model via depth_completion pipeline.
+# Run from augundo-ext repo root (same as train_fusionnet-kitti.sh).
+# To resume or load a pretrained checkpoint, add: --restore_paths path/to/unos-STEP.pth
+# Stereo: set input_channels_image=6; dataloader must provide left+right concat (e.g. stereo list).
+# Mac: uses CPU (--device cpu). On Linux with CUDA, change to --device gpu and set CUDA_VISIBLE_DEVICES.
+
+# Use CPU on Mac (no CUDA); on Linux with GPU you can use: export CUDA_VISIBLE_DEVICES=0
+if [[ "$(uname)" == "Darwin" ]]; then
+  export DEVICE=cpu
+else
+  export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+  export DEVICE=gpu
+fi
+
+python depth_completion/src/train_depth_completion.py \
+--train_images_path training/kitti/unsupervised/kitti_train_nonstatic_images.txt \
+--train_sparse_depth_path training/kitti/unsupervised/kitti_train_nonstatic_sparse_depth.txt \
+--train_intrinsics_path training/kitti/unsupervised/kitti_train_nonstatic_intrinsics.txt \
+--val_image_path validation/kitti/kitti_val_image.txt \
+--val_sparse_depth_path validation/kitti/kitti_val_sparse_depth.txt \
+--val_intrinsics_path validation/kitti/kitti_val_intrinsics.txt \
+--val_ground_truth_path validation/kitti/kitti_val_ground_truth.txt \
+--n_batch 8 \
+--n_height 256 \ # to match the input size of the model
+--n_width 832 \ # to match the input size of the model
+--model_name unos_kitti \
+--network_modules depth \
+--input_channels_image 6 \
+--input_channels_depth 2 \
+--normalized_image_range 0 1 \
+--min_predict_depth 1.5 \
+--max_predict_depth 100.0 \
+--learning_rates 1e-4 5e-5 \
+--learning_schedule 16 24 \
+--augmentation_probabilities 1.0 \
+--augmentation_schedule -1 \
+--augmentation_random_brightness 0.50 1.50 \
+--augmentation_random_contrast 0.50 1.50 \
+--augmentation_random_gamma -1 -1 \
+--augmentation_random_hue -0.1 0.1 \
+--augmentation_random_saturation 0.50 1.50 \
+--augmentation_random_noise_type none \
+--augmentation_random_noise_spread -1 \
+--augmentation_padding_mode edge \
+--augmentation_random_crop_type horizontal bottom anchored \
+--augmentation_random_crop_to_shape -1 -1 -1 -1 \
+--augmentation_random_flip_type horizontal \
+--augmentation_random_rotate_max 20 \
+--augmentation_random_crop_and_pad 0.90 1.00 \
+--augmentation_random_resize_and_pad -1 -1 \
+--augmentation_random_resize_and_crop -1 -1 \
+--augmentation_random_resize_to_shape -1 -1 \
+--augmentation_random_remove_patch_percent_range_image 1e-3 5e-3 \
+--augmentation_random_remove_patch_size_image 5 5 \
+--augmentation_random_remove_patch_percent_range_depth 0.60 0.70 \
+--augmentation_random_remove_patch_size_depth 1 1 \
+--supervision_type unsupervised \
+--w_losses w_color=0.20 w_structure=0.80 w_sparse_depth=0.10 w_smoothness=0.01 w_prior_depth=0.01 threshold_prior_depth=0.30 \
+--w_weight_decay_depth 0.00 \
+--w_weight_decay_pose 0.00 \
+--min_evaluate_depth 0.0 \
+--max_evaluate_depth 100.0 \
+--n_step_per_summary 5000 \
+--n_image_per_summary 8 \
+--n_step_per_checkpoint 5000 \
+--start_step_validation 100000 \
+--checkpoint_path trained_models/stereo_depth/unos/kitti/unos_augundo \
+--device ${DEVICE} \
+--n_thread 8

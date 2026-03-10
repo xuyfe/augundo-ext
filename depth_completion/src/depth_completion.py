@@ -78,6 +78,8 @@ def train(train_images_path,
           n_image_per_summary,
           start_step_validation,
           restore_paths,
+          # Optional (stereo / validation)
+          train_stereo_right_path=None,
           # Hardware settings
           device='cuda',
           n_thread=8):
@@ -141,17 +143,32 @@ def train(train_images_path,
         learning_schedule[-1] * np.floor(n_train_sample / n_batch).astype(np.int32)
 
     if supervision_type == 'unsupervised':
-        train_dataloader = torch.utils.data.DataLoader(
-            datasets.DepthCompletionMonocularTrainingDataset(
-                images_paths=train_images_paths,
-                sparse_depth_paths=train_sparse_depth_paths,
-                intrinsics_paths=train_intrinsics_paths,
-                random_crop_shape=(n_height, n_width),
-                random_crop_type=augmentation_random_crop_type),
-            batch_size=n_batch,
-            shuffle=True,
-            num_workers=n_thread,
-            drop_last=True)
+        if train_stereo_right_path is not None:
+            train_stereo_right_paths = data_utils.read_paths(train_stereo_right_path)
+            assert len(train_stereo_right_paths) == n_train_sample
+            train_dataloader = torch.utils.data.DataLoader(
+                datasets.DepthCompletionStereoTrainingDataset(
+                    images_paths=train_images_paths,
+                    right_images_paths=train_stereo_right_paths,
+                    intrinsics_paths=train_intrinsics_paths,
+                    random_crop_shape=(n_height, n_width),
+                    random_crop_type=augmentation_random_crop_type),
+                batch_size=n_batch,
+                shuffle=True,
+                num_workers=n_thread,
+                drop_last=True)
+        else:
+            train_dataloader = torch.utils.data.DataLoader(
+                datasets.DepthCompletionMonocularTrainingDataset(
+                    images_paths=train_images_paths,
+                    sparse_depth_paths=train_sparse_depth_paths,
+                    intrinsics_paths=train_intrinsics_paths,
+                    random_crop_shape=(n_height, n_width),
+                    random_crop_type=augmentation_random_crop_type),
+                batch_size=n_batch,
+                shuffle=True,
+                num_workers=n_thread,
+                drop_last=True)
     elif supervision_type == 'supervised':
         train_dataloader = torch.utils.data.DataLoader(
             datasets.DepthCompletionSupervisedTrainingDataset(

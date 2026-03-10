@@ -950,7 +950,13 @@ class Transforms(object):
 
             for b, image in enumerate(images):
                 if do_brightness[b]:
-                    images[b, ...] = functional.adjust_brightness(image, factors[b])
+                    if image.shape[0] == 6:
+                        images[b, ...] = torch.cat([
+                            functional.adjust_brightness(image[:3], factors[b]),
+                            functional.adjust_brightness(image[3:6], factors[b])
+                        ], dim=0)
+                    else:
+                        images[b, ...] = functional.adjust_brightness(image, factors[b])
 
             images_arr[i] = images
 
@@ -975,7 +981,13 @@ class Transforms(object):
 
             for b, image in enumerate(images):
                 if do_contrast[b]:
-                    images[b, ...] = functional.adjust_contrast(image, factors[b])
+                    if image.shape[0] == 6:
+                        images[b, ...] = torch.cat([
+                            functional.adjust_contrast(image[:3], factors[b]),
+                            functional.adjust_contrast(image[3:6], factors[b])
+                        ], dim=0)
+                    else:
+                        images[b, ...] = functional.adjust_contrast(image, factors[b])
 
             images_arr[i] = images
 
@@ -1000,7 +1012,13 @@ class Transforms(object):
 
             for b, image in enumerate(images):
                 if do_gamma[b]:
-                    images[b, ...] = functional.adjust_gamma(image, gammas[b], gain=1)
+                    if image.shape[0] == 6:
+                        images[b, ...] = torch.cat([
+                            functional.adjust_gamma(image[:3], gammas[b], gain=1),
+                            functional.adjust_gamma(image[3:6], gammas[b], gain=1)
+                        ], dim=0)
+                    else:
+                        images[b, ...] = functional.adjust_gamma(image, gammas[b], gain=1)
 
             images_arr[i] = images
 
@@ -1025,7 +1043,13 @@ class Transforms(object):
 
             for b, image in enumerate(images):
                 if do_hue[b]:
-                    images[b, ...] = functional.adjust_hue(image, factors[b])
+                    if image.shape[0] == 6:
+                        images[b, ...] = torch.cat([
+                            functional.adjust_hue(image[:3], factors[b]),
+                            functional.adjust_hue(image[3:6], factors[b])
+                        ], dim=0)
+                    else:
+                        images[b, ...] = functional.adjust_hue(image, factors[b])
 
             images_arr[i] = images
 
@@ -1050,7 +1074,13 @@ class Transforms(object):
 
             for b, image in enumerate(images):
                 if do_saturation[b]:
-                    images[b, ...] = functional.adjust_saturation(image, factors[b])
+                    if image.shape[0] == 6:
+                        images[b, ...] = torch.cat([
+                            functional.adjust_saturation(image[:3], factors[b]),
+                            functional.adjust_saturation(image[3:6], factors[b])
+                        ], dim=0)
+                    else:
+                        images[b, ...] = functional.adjust_saturation(image, factors[b])
 
             images_arr[i] = images
 
@@ -1349,7 +1379,7 @@ class Transforms(object):
                     rotated_images[b] = functional.rotate(
                         image,
                         angle=angles[b],
-                        resample=interpolation_mode,
+                        interpolation=interpolation_mode,
                         expand=True)
 
                 else:
@@ -1738,6 +1768,7 @@ class Transforms(object):
             list[torch.Tensor] : list of N x C x H x W tensors
         '''
 
+        images_arr = list(images_arr)
         n_images_arr = len(images_arr)
 
         if len(interpolation_modes) < n_images_arr:
@@ -1748,6 +1779,28 @@ class Transforms(object):
 
         for i, (images, interpolation_mode, original_shape) in enumerate(zip(images_arr, interpolation_modes, original_shapes)):
 
+            if isinstance(images, list):
+                # e.g. combined_outputs from stereo model: list of tensors at different scales
+                out_list = []
+                for t in images:
+                    orig_shape = (t.shape[2], t.shape[3])
+                    rev = [None] * t.shape[0]
+                    for b, image in enumerate(t):
+                        if do_rotate[b]:
+                            rev[b] = functional.rotate(
+                                image,
+                                angle=-1 * angles[b],
+                                interpolation=interpolation_mode,
+                                expand=True)
+                        else:
+                            rev[b] = image
+                        start_y = (rev[b].shape[1] - orig_shape[0]) // 2
+                        start_x = (rev[b].shape[2] - orig_shape[1]) // 2
+                        rev[b] = rev[b][:, start_y:start_y + orig_shape[0], start_x:start_x + orig_shape[1]]
+                    out_list.append(torch.stack(rev, dim=0))
+                images_arr[i] = out_list
+                continue
+
             reverse_rotated_images = [None] * images.shape[0]
 
             for b, image in enumerate(images):
@@ -1756,7 +1809,7 @@ class Transforms(object):
                     reverse_rotated_images[b] = functional.rotate(
                         image,
                         angle=-1 * angles[b],
-                        resample=interpolation_mode,
+                        interpolation=interpolation_mode,
                         expand=True)
                 else:
                     reverse_rotated_images[b] = image
@@ -1805,6 +1858,7 @@ class Transforms(object):
             list[torch.Tensor] : list of transformed N x C x H x W image tensors
         '''
 
+        images_arr = list(images_arr)
         n_images_arr = len(images_arr)
 
         if len(padding_modes) < n_images_arr:
@@ -1812,6 +1866,20 @@ class Transforms(object):
                 padding_modes + [padding_modes[-1]] * (n_images_arr - len(padding_modes))
 
         for i, (images, padding_mode) in enumerate(zip(images_arr, padding_modes)):
+
+            if isinstance(images, list):
+                images_arr[i] = [
+                    self.reverse_crop_and_pad(
+                        [t],
+                        do_crop_and_pad,
+                        start_yx,
+                        end_yx,
+                        padding,
+                        padding_modes=[padding_mode],
+                        padding_value=padding_value)[0]
+                    for t in images
+                ]
+                continue
 
             output_images = torch.zeros_like(images)
 

@@ -249,8 +249,8 @@ class PWCDisp(nn.Module):
         
         # In PyTorch, img1.size() is [B, C, H, W]
         # We need H and W from the original input. Since features are passed, we don't naturally have H, W here.
-        # However, feat1_2 is 1/4 resolution.
-        H_2, W_2 = feat1_2.shape[2], feat1_2.shape[3]
+        # However, feature1_2 is 1/4 resolution.
+        H_2, W_2 = feature1_2.shape[2], feature1_2.shape[3]
         H_full, W_full = H_2 * 4, W_2 * 4
         
         # flow2 is [B, 2, H/4, W/4]. We only care about X component for disparity.

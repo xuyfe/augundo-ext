@@ -516,39 +516,43 @@ def setup_dataset_kitti_training(paths_only=False, n_thread=8):
             sequence = sparse_depth_left_paths[0].split(os.sep)[5]
             sequence_date = sequence[0:10]
 
+            # CHANGE CODE
+            # Skip if calibration data not found
+            if (sequence_date, 'image_02') not in intrinsics_dkeys:
+                print('Warning: Calibration data not found for sequence date {}, skipping...'.format(sequence_date))
+                continue
+
             image_left_all_paths = sorted(glob.glob(
                 os.path.join(KITTI_RAW_DATA_DIRPATH, sequence_date, sequence, 'image_02', 'data', '*.png')))
 
             image_right_all_paths = sorted(glob.glob(
                 os.path.join(KITTI_RAW_DATA_DIRPATH, sequence_date, sequence, 'image_03', 'data', '*.png')))
 
-            # Get image paths that correspond to sparse depth paths
-            keep_indices = []
-            for idx in range(len(image_left_all_paths)):
+            ## CHANGE CODE DUE TO SMALLER SAMPLE SIZE
+            # Filter data streams to ensure alignment by filename intersection
+            sparse_depth_left_names = {os.path.basename(p) for p in sparse_depth_left_paths}
+            sparse_depth_right_names = {os.path.basename(p) for p in sparse_depth_right_paths}
+            ground_truth_left_names = {os.path.basename(p) for p in ground_truth_left_paths}
+            ground_truth_right_names = {os.path.basename(p) for p in ground_truth_right_paths}
+            image_left_names = {os.path.basename(p) for p in image_left_all_paths}
+            image_right_names = {os.path.basename(p) for p in image_right_all_paths}
 
-                filename_left = image_left_all_paths[idx].split(os.sep)[-1]
-                filename_right = image_right_all_paths[idx].split(os.sep)[-1]
+            common_names = sparse_depth_left_names \
+                .intersection(sparse_depth_right_names) \
+                .intersection(ground_truth_left_names) \
+                .intersection(ground_truth_right_names) \
+                .intersection(image_left_names) \
+                .intersection(image_right_names)
 
-                assert filename_left == filename_right
-
-                for sparse_depth_left_path in sparse_depth_left_paths:
-                    if filename_left in sparse_depth_left_path:
-                        keep_indices.append(idx)
-                        break
-
-            # Sparse depth and ground truth are subset of images
-            image_left_paths = [
-                image_left_all_paths[idx] for idx in keep_indices
-            ]
-            image_left_paths = sorted(image_left_paths)
-
-            image_right_paths = [
-                image_right_all_paths[idx] for idx in keep_indices
-            ]
-            image_right_paths = sorted(image_right_paths)
+            sparse_depth_left_paths = sorted([p for p in sparse_depth_left_paths if os.path.basename(p) in common_names])
+            sparse_depth_right_paths = sorted([p for p in sparse_depth_right_paths if os.path.basename(p) in common_names])
+            ground_truth_left_paths = sorted([p for p in ground_truth_left_paths if os.path.basename(p) in common_names])
+            ground_truth_right_paths = sorted([p for p in ground_truth_right_paths if os.path.basename(p) in common_names])
+            image_left_paths = sorted([p for p in image_left_all_paths if os.path.basename(p) in common_names])
+            image_right_paths = sorted([p for p in image_right_all_paths if os.path.basename(p) in common_names])
 
             n_sample = len(sparse_depth_left_paths)
-
+            ## CHANGE CODE DUE TO SMALLER SAMPLE SIZE
             # Check that data streams are aligned
             assert n_sample == len(sparse_depth_left_paths)
             assert n_sample == len(ground_truth_left_paths)

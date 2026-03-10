@@ -22,9 +22,11 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--train_images_path',
     type=str, required=True, help='Path to list of training image triplets paths')
 parser.add_argument('--train_sparse_depth_path',
-    type=str, required=True, help='Path to list of training sparse depth paths')
+    type=str, default=None, help='Path to list of training sparse depth paths (optional if --train_stereo_right_path is set)')
 parser.add_argument('--train_intrinsics_path',
     type=str, default=None, help='Path to list of training camera intrinsics paths')
+parser.add_argument('--train_stereo_right_path',
+    type=str, default=None, help='Path to list of right-camera image paths (UnOS-style stereo). When set, uses stereo dataset and input is 6-channel left|right.')
 parser.add_argument('--train_ground_truth_path',
     type=str, default=None, help='Path to list of training ground_truth paths')
 parser.add_argument('--val_image_path',
@@ -189,9 +191,13 @@ if __name__ == '__main__':
 
     args.device = 'cuda' if args.device == 'gpu' else args.device
 
+    if args.train_stereo_right_path is None and args.train_sparse_depth_path is None:
+        raise ValueError('Either --train_sparse_depth_path or --train_stereo_right_path must be set.')
+
     train(train_images_path=args.train_images_path,
-          train_sparse_depth_path=args.train_sparse_depth_path,
+          train_sparse_depth_path=args.train_sparse_depth_path or args.train_images_path,
           train_intrinsics_path=args.train_intrinsics_path,
+          train_stereo_right_path=args.train_stereo_right_path,
           train_ground_truth_path=args.train_ground_truth_path,
           val_image_path=args.val_image_path,
           val_sparse_depth_path=args.val_sparse_depth_path,
