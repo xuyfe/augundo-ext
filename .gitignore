@@ -1,0 +1,5 @@
+data/
+testing/
+training/
+augundo-py310env/
+bash/.DS_Store
