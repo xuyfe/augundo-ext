@@ -81,10 +81,29 @@ class DepthCompletionModel(object):
                 min_predict_depth=min_predict_depth,
                 max_predict_depth=max_predict_depth,
                 device=device)
+        elif 'unos' in model_name:
+            from unos_model import UnOSModel
+
+            self.model = UnOSModel(
+                dataset_name=dataset_name,
+                network_modules=network_modules,
+                min_predict_depth=min_predict_depth,
+                max_predict_depth=max_predict_depth,
+                device=device)
+        elif 'bridgedepthflow' in model_name:
+            from bridgedepthflow_model import BridgeDepthFlowModelWrapper
+
+            self.model = BridgeDepthFlowModelWrapper(
+                dataset_name=dataset_name,
+                network_modules=network_modules,
+                min_predict_depth=min_predict_depth,
+                max_predict_depth=max_predict_depth,
+                device=device)
         else:
             raise ValueError('Unsupported depth completion model: {}'.format(model_name))
 
-    def forward_depth(self, image, sparse_depth, validity_map, intrinsics=None, return_all_outputs=False):
+    def forward_depth(self, image, sparse_depth, validity_map, intrinsics=None,
+                      right_image=None, return_all_outputs=False):
         '''
         Forwards stereo pair through network
 
@@ -97,18 +116,29 @@ class DepthCompletionModel(object):
                 N x 1 x H x W valid locations of projected sparse point cloud
             intrinsics : torch.Tensor[float32]
                 N x 3 x 3 intrinsic camera calibration matrix
+            right_image : torch.Tensor[float32]
+                N x 3 x H x W right image (required for stereo models)
             return_all_outputs : bool
                 if set, then return list of N x 1 x H x W depth maps else a single N x 1 x H x W depth map
         Returns:
             list[torch.Tensor[float32]] : a single or list of N x 1 x H x W outputs
         '''
 
-        return self.model.forward_depth(
-            image,
-            sparse_depth,
-            validity_map,
-            intrinsics,
-            return_all_outputs)
+        if 'unos' in self.model_name or 'bridgedepthflow' in self.model_name:
+            return self.model.forward_depth(
+                image,
+                sparse_depth,
+                validity_map,
+                intrinsics,
+                right_image=right_image,
+                return_all_outputs=return_all_outputs)
+        else:
+            return self.model.forward_depth(
+                image,
+                sparse_depth,
+                validity_map,
+                intrinsics,
+                return_all_outputs)
 
     def forward_pose(self, image0, image1):
         '''
@@ -137,7 +167,10 @@ class DepthCompletionModel(object):
                      pose0to2,
                      ground_truth0=None,
                      supervision_type='unsupervised',
-                     w_losses={}):
+                     w_losses={},
+                     right_image0=None,
+                     right_image1=None,
+                     right_image2=None):
         '''
         Call model's compute loss function
 
@@ -166,6 +199,12 @@ class DepthCompletionModel(object):
                 type of supervision for training
             w_losses : dict[str, float]
                 dictionary of weights for each loss
+            right_image0 : torch.Tensor[float32]
+                N x 3 x H x W right image at time step t (stereo models only)
+            right_image1 : torch.Tensor[float32]
+                N x 3 x H x W right image at time step t-1 (stereo models only)
+            right_image2 : torch.Tensor[float32]
+                N x 3 x H x W right image at time step t+1 (stereo models only)
         Returns:
             float : loss averaged over the batch
             dict[str, float] : loss info
@@ -176,17 +215,33 @@ class DepthCompletionModel(object):
                 target_depth=ground_truth0,
                 output_depth=output_depth0)
         elif supervision_type == 'unsupervised':
-            return self.model.compute_loss(
-                image0=image0,
-                image1=image1,
-                image2=image2,
-                output_depth0=output_depth0,
-                sparse_depth0=sparse_depth0,
-                validity_map0=validity_map0,
-                intrinsics=intrinsics,
-                pose0to1=pose0to1,
-                pose0to2=pose0to2,
-                w_losses=w_losses)
+            if 'unos' in self.model_name or 'bridgedepthflow' in self.model_name:
+                return self.model.compute_loss(
+                    image0=image0,
+                    image1=image1,
+                    image2=image2,
+                    output_depth0=output_depth0,
+                    sparse_depth0=sparse_depth0,
+                    validity_map0=validity_map0,
+                    intrinsics=intrinsics,
+                    pose0to1=pose0to1,
+                    pose0to2=pose0to2,
+                    w_losses=w_losses,
+                    right_image0=right_image0,
+                    right_image1=right_image1,
+                    right_image2=right_image2)
+            else:
+                return self.model.compute_loss(
+                    image0=image0,
+                    image1=image1,
+                    image2=image2,
+                    output_depth0=output_depth0,
+                    sparse_depth0=sparse_depth0,
+                    validity_map0=validity_map0,
+                    intrinsics=intrinsics,
+                    pose0to1=pose0to1,
+                    pose0to2=pose0to2,
+                    w_losses=w_losses)
         else:
             raise ValueError('Unsupported supervision type: {}'.format(supervision_type))
 
@@ -291,6 +346,16 @@ class DepthCompletionModel(object):
                 model_pose_restore_path=restore_paths[1] if len(restore_paths) > 1 else None,
                 optimizer_depth=optimizer_depth,
                 optimizer_pose=optimizer_pose)
+        elif 'unos' in self.model_name:
+            return self.model.restore_model(
+                model_depth_restore_path=restore_paths[0],
+                model_pose_restore_path=restore_paths[1] if len(restore_paths) > 1 else None,
+                optimizer_depth=optimizer_depth,
+                optimizer_pose=optimizer_pose)
+        elif 'bridgedepthflow' in self.model_name:
+            return self.model.restore_model(
+                model_depth_restore_path=restore_paths[0],
+                optimizer_depth=optimizer_depth)
         else:
             raise ValueError('Unsupported depth completion model: {}'.format(self.model_name))
 
@@ -341,6 +406,18 @@ class DepthCompletionModel(object):
                 optimizer_depth,
                 model_pose_checkpoint_path=os.path.join(checkpoint_dirpath, 'posenet-{}.pth'.format(step)),
                 optimizer_pose=optimizer_pose)
+        elif 'unos' in self.model_name:
+            self.model.save_model(
+                os.path.join(checkpoint_dirpath, 'unos-{}.pth'.format(step)),
+                step,
+                optimizer_depth,
+                model_pose_checkpoint_path=os.path.join(checkpoint_dirpath, 'posenet-{}.pth'.format(step)),
+                optimizer_pose=optimizer_pose)
+        elif 'bridgedepthflow' in self.model_name:
+            self.model.save_model(
+                os.path.join(checkpoint_dirpath, 'bridgedepthflow-{}.pth'.format(step)),
+                step,
+                optimizer_depth)
         else:
             raise ValueError('Unsupported depth completion model: {}'.format(self.model_name))
 
