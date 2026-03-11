@@ -30,12 +30,13 @@ python train_stereo_depth_completion.py \
     --train_data_root "$SENIOR_THESIS/augundo-ext/data/kitti_raw_data" \
     --model_name unos \
     --network_modules stereo \
+    --n_thread 2 \
     --n_batch 4 \
     --n_height 256 \
     --n_width 832 \
     --learning_rates 1e-4 5e-5 \
     --learning_schedule 10 20 \
-    --checkpoint_path "$SENIOR_THESIS/augundo-ext/checkpoints/bridgedepthflow_stereo" \
+    --checkpoint_path "$SENIOR_THESIS/augundo-ext/checkpoints/unos_stereo" \
     --no_augment
 
 echo "Training completed"

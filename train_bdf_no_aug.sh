@@ -25,16 +25,18 @@ echo "Data dir: $DATA_PATH"
 echo "CWD:      $DEPTH_SRC"
 
 cd "$DEPTH_SRC" || exit 1
+# learning rates and schedule are from the original paper, as well as image and batch sizes
 python train_stereo_depth_completion.py \
-    --train_data_file "$SENIOR_THESIS/augundo-ext/data/unos_train_4frames.txt" \
-    --train_data_root "$SENIOR_THESIS/augundo-ext/data/kitti_raw_data" \
     --model_name bridgedepthflow \
     --network_modules stereo \
-    --n_batch 4 \
+    --n_batch 2 \
+    --n_thread 2 \
     --n_height 256 \
-    --n_width 832 \
-    --learning_rates 1e-4 5e-5 \
-    --learning_schedule 10 20 \
+    --n_width 512 \
+    --learning_rates 1e-4 5e-5 2.5e-5 1.25e-5 6.25e-6 \
+    --learning_schedule 3 6 9 12 15 \
+    --train_data_file "$SENIOR_THESIS/augundo-ext/data/unos_train_4frames.txt" \
+    --train_data_root "$SENIOR_THESIS/augundo-ext/data/kitti_raw_data" \
     --checkpoint_path "$SENIOR_THESIS/augundo-ext/checkpoints/bridgedepthflow_stereo" \
     --no_augment
 
