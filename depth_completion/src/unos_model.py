@@ -1,8 +1,12 @@
 import os, sys
 import torch
 import torch.nn.functional as F
-sys.path.insert(0, os.path.join('external-src', 'stereo_depth_completion'))
-sys.path.insert(0, os.path.join('external-src', 'stereo_depth_completion', 'UnOS'))
+# Path to UnOS package: augundo-ext/external-src/stereo_depth_completion/UnOS (script is in augundo-ext/depth_completion/src)
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+_repo_root = os.path.abspath(os.path.join(_script_dir, '..', '..'))
+_unos_root = os.path.join(_repo_root, 'external-src', 'stereo_depth_completion')
+if _unos_root not in sys.path:
+    sys.path.insert(0, _unos_root)
 from UnOS.unos_stereo import UnOSStereo, UnOSDepth, UnOSDepthFlow
 from UnOS.pose_net import PoseNet
 

@@ -15,6 +15,12 @@ import os, time, sys
 import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
+# Ensure augundo-ext root is on path so 'utils' is findable (whether cwd is src/ or augundo-ext/)
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+_repo_root = os.path.abspath(os.path.join(_script_dir, '..', '..'))
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
 sys.path.insert(0, os.getcwd())
 from utils.src import data_utils, eval_utils
 from utils.src.log_utils import log
@@ -317,7 +323,8 @@ def train(train_data_file,
             augmentation_schedule_pos = augmentation_schedule_pos + 1
             augmentation_probability = augmentation_probabilities[augmentation_schedule_pos]
 
-        for batch in train_dataloader:
+        pbar = tqdm(train_dataloader, desc='Epoch {}'.format(epoch), leave=True)
+        for batch in pbar:
 
             train_step = train_step + 1
 
@@ -420,6 +427,8 @@ def train(train_data_file,
             optimizer_depth.zero_grad()
             loss.backward()
             optimizer_depth.step()
+
+            pbar.set_postfix(loss='{:.4f}'.format(loss.item()), step=train_step)
 
             if (train_step % n_step_per_summary) == 0:
                 # Log summary

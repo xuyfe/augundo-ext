@@ -86,6 +86,7 @@ Key differences from monocular pipeline:
 
 ### Training
 
+UnOS with AugUndo framework
 ```bash
 cd augundo-ext/depth_completion/src
 
@@ -105,6 +106,23 @@ python train_stereo_depth_completion.py \
     --augmentation_random_contrast 0.8 1.2
 ```
 
+UnOS without AugUndo framework
+```bash
+cd augundo-ext/depth_completion/src
+
+python train_stereo_depth_completion.py \
+    --train_data_file ../../data/unos_train_4frames.txt \
+    --train_data_root ../../data/kitti_raw_data \
+    --model_name unos \
+    --network_modules stereo \
+    --n_batch 4 \
+    --n_height 256 \
+    --n_width 832 \
+    --learning_rates 1e-4 5e-5 \
+    --learning_schedule 10 20 \
+    --checkpoint_path ../../checkpoints/unos_stereo \
+    --no_augment
+```
 ### Inference
 
 ```bash
