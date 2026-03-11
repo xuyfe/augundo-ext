@@ -125,12 +125,23 @@ python train_stereo_depth_completion.py \
 ```
 ### Inference
 
+Before inference, run:
+
+```bash
+cd augundo-ext
+
+python data/generate_stereo_val_paths.py
+```
+
+This will generate the left, right, intrinsics, and sparse depths paths needed for validation.
+
 ```bash
 python run_stereo_depth_completion.py \
-    --left_image_path /path/to/left_images.txt \
-    --right_image_path /path/to/right_images.txt \
-    --sparse_depth_path /path/to/sparse_depths.txt \
-    --intrinsics_path /path/to/intrinsics.txt \
+    --left_image_path  ../../data/stereo_val_left_image.txt \
+    --right_image_path ../../data/stereo_val_right_image.txt \
+    --sparse_depth_path ../../data/stereo_val_sparse_depth.txt \
+    --intrinsics_path  ../../data/stereo_val_intrinsics.txt \
+    --ground_truth_path ../../data/stereo_val_ground_truth.txt \
     --model_name unos \
     --restore_paths /path/to/checkpoint.pth \
     --output_path /path/to/output \
