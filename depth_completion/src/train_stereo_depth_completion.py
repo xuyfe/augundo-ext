@@ -1,3 +1,10 @@
+"""
+Train stereo depth completion (UnOS / BridgeDepthFlow) on 4-frame UnOS-format data.
+
+Augmentations (AugUndo framework):
+  - With augmentations (default): use default args or e.g. --augmentation_probabilities 1.0
+  - Without augmentations: add --no_augment or set --augmentation_probabilities 0
+"""
 import argparse
 import torch
 from stereo_depth_completion import train
@@ -71,8 +78,10 @@ parser.add_argument('--learning_schedule',
     nargs='+', type=int, default=[10, 20], help='Space delimited list to change learning rate')
 
 # Augmentation settings
+parser.add_argument('--no_augment',
+    action='store_true', help='Disable all augmentations (AugUndo pipeline off). Same as --augmentation_probabilities 0.')
 parser.add_argument('--augmentation_probabilities',
-    nargs='+', type=float, default=[1.00], help='Probabilities to use data augmentation')
+    nargs='+', type=float, default=[1.00], help='Probabilities to use data augmentation. Use 0 to disable (or --no_augment).')
 parser.add_argument('--augmentation_schedule',
     nargs='+', type=int, default=[-1], help='Schedule to change augmentation probability')
 
@@ -181,6 +190,9 @@ if __name__ == '__main__':
 
     if args.w_losses is None:
         args.w_losses = {}
+
+    if args.no_augment:
+        args.augmentation_probabilities = [0.0]
 
     train(train_data_file=args.train_data_file,
           train_data_root=args.train_data_root,
