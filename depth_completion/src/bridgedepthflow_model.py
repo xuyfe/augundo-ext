@@ -39,13 +39,17 @@ class BridgeDepthFlowModelWrapper(object):
                  network_modules=['stereo'],
                  min_predict_depth=1.5,
                  max_predict_depth=100.0,
-                 device=torch.device('cuda')):
+                 device=torch.device('cuda'),
+                 n_height=None,
+                 n_width=None):
 
         self.network_modules = network_modules
         self.min_predict_depth = min_predict_depth
         self.max_predict_depth = max_predict_depth
 
-        if dataset_name == 'kitti' or dataset_name == 'vkitti':
+        if n_height is not None and n_width is not None:
+            img_height, img_width = int(n_height), int(n_width)
+        elif dataset_name == 'kitti' or dataset_name == 'vkitti':
             img_height = 256
             img_width = 832
         else:
