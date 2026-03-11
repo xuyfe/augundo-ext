@@ -1,0 +1,5 @@
+Stereo depth completion training
+Model: unos
+n_train_sample=47766  n_train_step=238820
+
+Begin training...

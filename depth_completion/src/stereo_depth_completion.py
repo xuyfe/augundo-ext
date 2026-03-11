@@ -33,6 +33,26 @@ from stereo_dataloader import (
 )
 
 
+def _resolve_device(device):
+    """Resolve device string to torch.device, with fallback when CUDA is not available."""
+    if isinstance(device, torch.device):
+        return device
+    s = device.lower() if isinstance(device, str) else str(device)
+    if s in ('cuda', 'gpu'):
+        if torch.cuda.is_available():
+            return torch.device('cuda')
+        if getattr(torch.backends, 'mps', None) is not None and torch.backends.mps.is_available():
+            return torch.device('mps')
+        return torch.device('cpu')
+    if s == 'cpu':
+        return torch.device('cpu')
+    if s == 'mps':
+        if getattr(torch.backends, 'mps', None) is not None and torch.backends.mps.is_available():
+            return torch.device('mps')
+        return torch.device('cpu')
+    return torch.device(s)
+
+
 def train(train_data_file,
           train_data_root,
           train_sparse_depth_path,
@@ -102,13 +122,8 @@ def train(train_data_file,
           device='cuda',
           n_thread=8):
 
-    # Select device
-    if device == 'cuda' or device == 'gpu':
-        device = torch.device('cuda')
-    elif device == 'cpu':
-        device = torch.device('cpu')
-    else:
-        raise ValueError('Unsupported device: {}'.format(device))
+    # Select device (fallback to CPU or MPS when CUDA not compiled or not available)
+    device = _resolve_device(device)
 
     # Set up checkpoint and event paths
     if not os.path.exists(checkpoint_path):
@@ -116,6 +131,7 @@ def train(train_data_file,
 
     checkpoint_dirpath = os.path.join(checkpoint_path, 'checkpoints-{}')
     log_path = os.path.join(checkpoint_path, 'results.txt')
+    log('device={}'.format(device), log_path)
     event_path = os.path.join(checkpoint_path, 'events')
 
     best_results = {
@@ -244,7 +260,9 @@ def train(train_data_file,
         network_modules=network_modules,
         min_predict_depth=min_predict_depth,
         max_predict_depth=max_predict_depth,
-        device=device)
+        device=device,
+        n_height=n_height,
+        n_width=n_width)
 
     parameters_depth_model = depth_completion_model.parameters_depth()
 
@@ -661,13 +679,8 @@ def run(left_image_path,
         # Hardware settings
         device):
 
-    # Select device
-    if device == 'cuda' or device == 'gpu':
-        device = torch.device('cuda')
-    elif device == 'cpu':
-        device = torch.device('cpu')
-    else:
-        raise ValueError('Unsupported device: {}'.format(device))
+    # Select device (fallback to CPU or MPS when CUDA not compiled or not available)
+    device = _resolve_device(device)
 
     '''
     Set up output paths
