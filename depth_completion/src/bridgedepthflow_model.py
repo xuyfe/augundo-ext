@@ -1,6 +1,12 @@
 import os, sys
 import torch
 import torch.nn.functional as F
+# Path to BridgeDepthFlow package: augundo-ext/external-src/stereo_depth_completion/BridgeDepthFlow (script is in augundo-ext/depth_completion/src)
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+_repo_root = os.path.abspath(os.path.join(_script_dir, '..', '..'))
+_bdf_root = os.path.join(_repo_root, 'external-src', 'stereo_depth_completion')
+if _bdf_root not in sys.path:
+    sys.path.insert(0, _bdf_root)
 sys.path.insert(0, os.path.join('external-src', 'stereo_depth_completion'))
 from BridgeDepthFlow.bridge_depth_flow import BridgeDepthFlowModel
 

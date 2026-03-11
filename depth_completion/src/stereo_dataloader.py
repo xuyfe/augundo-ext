@@ -17,10 +17,30 @@ Data format notes:
 Both models share the same data requirements so a single dataloader suffices.
 '''
 
+import os
 import torch
 import numpy as np
 from utils.src import data_utils
-from depth_completion.src.datasets import random_crop
+from datasets import random_crop
+
+
+def load_intrinsics(path):
+    '''
+    Load a 3x3 intrinsics matrix from .npy or flat .txt file.
+
+    Arg(s):
+        path : str
+            path to intrinsics file (.npy or .txt with 9 space-separated floats)
+    Returns:
+        numpy[float32] : 3x3 intrinsics matrix
+    '''
+
+    if path.endswith('.npy'):
+        return np.load(path).astype(np.float32)
+    else:
+        # Flat text: 9 space-separated floats (row-major 3x3)
+        values = np.loadtxt(path, dtype=np.float32)
+        return values.reshape(3, 3)
 
 
 def load_stereo_pair(left_path, right_path, data_format='CHW'):
@@ -353,7 +373,7 @@ class StereoDepthCompletionInferenceDataset(torch.utils.data.Dataset):
             intrinsics, baseline = parse_kitti_calibration(
                 self.intrinsics_paths[index], cam_id=2)
         else:
-            intrinsics = np.load(self.intrinsics_paths[index]).astype(np.float32)
+            intrinsics = load_intrinsics(self.intrinsics_paths[index])
             baseline = self.default_baseline
 
         output = {
