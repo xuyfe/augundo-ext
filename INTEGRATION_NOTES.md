@@ -164,3 +164,27 @@ python test_stereo_smoke.py
 - TF `tf.nn.avg_pool` 'VALID' padding -> PyTorch `F.avg_pool2d` with no padding
 - Forward warping uses scatter-based splatting (custom implementation)
 - Cost volume: horizontal-only 1D search for disparity, 2D search for flow
+
+## BridgeDepthFlow (Lai et al. CVPR 2019) training settings
+
+From the paper (Section 4.1 Implementation Details):
+
+- **Image size**: 512 × 256 (paper); our default is 832×256 for KITTI. Use `--n_height 256 --n_width 512` for paper-matching (model now accepts these).
+- **Batch size**: 2 (paper). Use `--n_batch 2`.
+- **Epochs**: Learning rate halved every 3 epochs for 5 times (~15–20 epochs). Use `--learning_schedule 3 6 9 12 15` with `--learning_rates 1e-4 5e-5 2.5e-5 1.25e-5 6.25e-6` for 15 epochs, or `--learning_schedule 3 20` with `--learning_rates 1e-4 5e-5` for 20 epochs with one halving at epoch 3.
+- **Optimizer**: Adam; **initial LR**: 1e-4 (our default).
+- **Augmentation**: Paper uses left-right flip and color aug (we have AugUndo; default on, or `--no_augment` to disable).
+
+Example (paper-like):
+
+```bash
+python train_stereo_depth_completion.py \
+  --model_name bridgedepthflow \
+  --network_modules stereo \
+  --n_batch 2 \
+  --n_height 256 \
+  --n_width 512 \
+  --learning_rates 1e-4 5e-5 2.5e-5 1.25e-5 6.25e-6 \
+  --learning_schedule 3 6 9 12 15 \
+  --train_data_file ... --train_data_root ... --checkpoint_path ...
+```
