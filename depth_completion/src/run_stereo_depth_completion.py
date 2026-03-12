@@ -29,6 +29,10 @@ parser.add_argument('--input_channels_depth',
 parser.add_argument('--normalized_image_range',
     nargs='+', type=float, default=[0, 1])
 
+# Inference size (optional). If set, inputs are resized to this before forward (avoids UnOS pyramid shape mismatch).
+parser.add_argument('--n_height', type=int, default=None, help='Inference height (e.g. 256 for UnOS)')
+parser.add_argument('--n_width', type=int, default=None, help='Inference width (e.g. 832 for UnOS)')
+
 # Depth network settings
 parser.add_argument('--model_name',
     type=str, default='unos', help='Stereo depth completion model name: unos, bridgedepthflow')
@@ -75,6 +79,8 @@ if __name__ == '__main__':
         intrinsics_path=args.intrinsics_path,
         ground_truth_path=args.ground_truth_path,
         restore_paths=args.restore_paths,
+        n_height=args.n_height,
+        n_width=args.n_width,
         input_channels_image=args.input_channels_image,
         input_channels_depth=args.input_channels_depth,
         normalized_image_range=args.normalized_image_range,
