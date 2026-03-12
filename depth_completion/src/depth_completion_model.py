@@ -421,6 +421,14 @@ class DepthCompletionModel(object):
         else:
             raise ValueError('Unsupported depth completion model: {}'.format(self.model_name))
 
+    def _safe_add_histogram(self, summary_writer, tag, values, step):
+        """Call add_histogram; skip on failure (e.g. NumPy/TensorBoard dtype issues)."""
+        try:
+            v = values.float().cpu().numpy() if hasattr(values, 'float') else values
+            summary_writer.add_histogram(tag, v, global_step=step)
+        except Exception:
+            pass
+
     def log_summary(self,
                     summary_writer,
                     tag,
@@ -553,8 +561,8 @@ class DepthCompletionModel(object):
                         torch.zeros(n_batch, 3, n_height, n_width, device=torch.device('cpu'))],
                         dim=3))
 
-                # Log distribution of output depth
-                summary_writer.add_histogram(tag + '_output_depth0_distro', output_depth0, global_step=step)
+                # Log distribution of output depth (skipped if add_histogram fails, e.g. NumPy/TB mismatch)
+                self._safe_add_histogram(summary_writer, tag + '_output_depth0_distro', output_depth0, step)
 
             if output_depth0 is not None and sparse_depth0 is not None and validity_map0 is not None:
                 sparse_depth0_summary = sparse_depth0[0:n_image_per_summary, ...]
@@ -585,8 +593,8 @@ class DepthCompletionModel(object):
                         sparse_depth0_error_summary],
                         dim=3))
 
-                # Log distribution of sparse depth
-                summary_writer.add_histogram(tag + '_sparse_depth0_distro', sparse_depth0, global_step=step)
+                # Log distribution of sparse depth (skipped if add_histogram fails)
+                self._safe_add_histogram(summary_writer, tag + '_sparse_depth0_distro', sparse_depth0, step)
 
             if output_depth0 is not None and ground_truth0 is not None:
 
@@ -621,20 +629,20 @@ class DepthCompletionModel(object):
                         ground_truth0_error_summary],
                         dim=3))
 
-                # Log distribution of ground truth
-                summary_writer.add_histogram(tag + '_ground_truth0_distro', ground_truth0, global_step=step)
+                # Log distribution of ground truth (skipped if add_histogram fails)
+                self._safe_add_histogram(summary_writer, tag + '_ground_truth0_distro', ground_truth0, step)
 
             if pose0to1 is not None:
-                # Log distribution of pose 1 to 0translation vector
-                summary_writer.add_histogram(tag + '_tx0to1_distro', pose0to1[:, 0, 3], global_step=step)
-                summary_writer.add_histogram(tag + '_ty0to1_distro', pose0to1[:, 1, 3], global_step=step)
-                summary_writer.add_histogram(tag + '_tz0to1_distro', pose0to1[:, 2, 3], global_step=step)
+                # Log distribution of pose 0→1 translation (skipped if add_histogram fails)
+                self._safe_add_histogram(summary_writer, tag + '_tx0to1_distro', pose0to1[:, 0, 3], step)
+                self._safe_add_histogram(summary_writer, tag + '_ty0to1_distro', pose0to1[:, 1, 3], step)
+                self._safe_add_histogram(summary_writer, tag + '_tz0to1_distro', pose0to1[:, 2, 3], step)
 
             if pose0to2 is not None:
-                # Log distribution of pose 2 to 0 translation vector
-                summary_writer.add_histogram(tag + '_tx0to2_distro', pose0to2[:, 0, 3], global_step=step)
-                summary_writer.add_histogram(tag + '_ty0to2_distro', pose0to2[:, 1, 3], global_step=step)
-                summary_writer.add_histogram(tag + '_tz0to2_distro', pose0to2[:, 2, 3], global_step=step)
+                # Log distribution of pose 0→2 translation (skipped if add_histogram fails)
+                self._safe_add_histogram(summary_writer, tag + '_tx0to2_distro', pose0to2[:, 0, 3], step)
+                self._safe_add_histogram(summary_writer, tag + '_ty0to2_distro', pose0to2[:, 1, 3], step)
+                self._safe_add_histogram(summary_writer, tag + '_tz0to2_distro', pose0to2[:, 2, 3], step)
 
         # Log scalars to tensorboard
         for (name, value) in scalars.items():
