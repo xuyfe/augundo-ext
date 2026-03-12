@@ -1,0 +1,7 @@
+data/
+results/
+testing/
+torchinductor_owenxuli/
+training/
+checkpoints/
+augundo-py310env/
