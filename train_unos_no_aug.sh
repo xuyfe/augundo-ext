@@ -2,7 +2,7 @@
 #SBATCH --job-name=train_unos_no_aug
 #SBATCH --time=2-00:00:00
 #SBATCH --mail-type=ALL
-#SBATCH --cpus-per-task=2
+#SBATCH --cpus-per-task=4
 #SBATCH --ntasks=1
 #SBATCH --gpus=rtx_5000_ada:1
 #SBATCH --partition=gpu
@@ -30,7 +30,7 @@ python train_stereo_depth_completion.py \
     --train_data_root "$SENIOR_THESIS/augundo-ext/data/kitti_raw_data" \
     --model_name unos \
     --network_modules stereo \
-    --n_thread 2 \
+    --n_thread 4 \
     --n_batch 4 \
     --n_height 256 \
     --n_width 832 \

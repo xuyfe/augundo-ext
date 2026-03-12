@@ -3,3 +3,69 @@ Model: unos
 n_train_sample=47766  n_train_step=238820
 
 Begin training...
+device=cuda
+device=cuda
+Stereo depth completion training
+Model: unos
+n_train_sample=47766  n_train_step=238820
+
+Begin training...
+device=cuda
+Stereo depth completion training
+Model: unos
+n_train_sample=47766  n_train_step=238820
+
+Begin training...
+device=cuda
+Stereo depth completion training
+Model: unos
+n_train_sample=47766  n_train_step=238820
+
+Begin training...
+Step=  5000/238820  Loss=1.73607  Time Elapsed=0.15h  Time Remaining=6.79h
+Step= 10000/238820  Loss=1.80039  Time Elapsed=0.29h  Time Remaining=6.66h
+Step= 15000/238820  Loss=1.45499  Time Elapsed=0.44h  Time Remaining=6.53h
+Step= 20000/238820  Loss=1.81963  Time Elapsed=0.58h  Time Remaining=6.39h
+Step= 25000/238820  Loss=1.64768  Time Elapsed=0.73h  Time Remaining=6.25h
+Step= 30000/238820  Loss=1.63080  Time Elapsed=0.88h  Time Remaining=6.11h
+Step= 35000/238820  Loss=1.83991  Time Elapsed=1.02h  Time Remaining=5.96h
+Step= 40000/238820  Loss=1.78912  Time Elapsed=1.17h  Time Remaining=5.82h
+Step= 45000/238820  Loss=1.61632  Time Elapsed=1.32h  Time Remaining=5.67h
+Step= 50000/238820  Loss=1.64587  Time Elapsed=1.46h  Time Remaining=5.53h
+Step= 55000/238820  Loss=1.70397  Time Elapsed=1.61h  Time Remaining=5.38h
+Step= 60000/238820  Loss=1.73267  Time Elapsed=1.76h  Time Remaining=5.24h
+Step= 65000/238820  Loss=1.58961  Time Elapsed=1.90h  Time Remaining=5.09h
+Step= 70000/238820  Loss=1.73820  Time Elapsed=2.05h  Time Remaining=4.95h
+Step= 75000/238820  Loss=1.30800  Time Elapsed=2.20h  Time Remaining=4.80h
+Step= 80000/238820  Loss=1.77467  Time Elapsed=2.34h  Time Remaining=4.65h
+Step= 85000/238820  Loss=1.51577  Time Elapsed=2.49h  Time Remaining=4.51h
+Step= 90000/238820  Loss=1.67668  Time Elapsed=2.64h  Time Remaining=4.36h
+Step= 95000/238820  Loss=1.49553  Time Elapsed=2.78h  Time Remaining=4.21h
+Step=100000/238820  Loss=1.80811  Time Elapsed=2.93h  Time Remaining=4.07h
+Step=105000/238820  Loss=1.66255  Time Elapsed=3.08h  Time Remaining=3.92h
+Step=110000/238820  Loss=1.56872  Time Elapsed=3.22h  Time Remaining=3.78h
+Step=115000/238820  Loss=1.75732  Time Elapsed=3.37h  Time Remaining=3.63h
+Step=120000/238820  Loss=1.61003  Time Elapsed=3.52h  Time Remaining=3.48h
+Step=125000/238820  Loss=1.79767  Time Elapsed=3.66h  Time Remaining=3.34h
+Step=130000/238820  Loss=1.56325  Time Elapsed=3.81h  Time Remaining=3.19h
+Step=135000/238820  Loss=1.64584  Time Elapsed=3.96h  Time Remaining=3.04h
+Step=140000/238820  Loss=1.61831  Time Elapsed=4.10h  Time Remaining=2.90h
+Step=145000/238820  Loss=1.68528  Time Elapsed=4.25h  Time Remaining=2.75h
+Step=150000/238820  Loss=1.68020  Time Elapsed=4.40h  Time Remaining=2.60h
+Step=155000/238820  Loss=1.69374  Time Elapsed=4.54h  Time Remaining=2.46h
+Step=160000/238820  Loss=1.44192  Time Elapsed=4.69h  Time Remaining=2.31h
+Step=165000/238820  Loss=1.59203  Time Elapsed=4.84h  Time Remaining=2.16h
+Step=170000/238820  Loss=1.39469  Time Elapsed=4.98h  Time Remaining=2.02h
+Step=175000/238820  Loss=1.69130  Time Elapsed=5.13h  Time Remaining=1.87h
+Step=180000/238820  Loss=1.75335  Time Elapsed=5.28h  Time Remaining=1.72h
+Step=185000/238820  Loss=1.75037  Time Elapsed=5.42h  Time Remaining=1.58h
+Step=190000/238820  Loss=1.63543  Time Elapsed=5.57h  Time Remaining=1.43h
+Step=195000/238820  Loss=1.71474  Time Elapsed=5.72h  Time Remaining=1.28h
+Step=200000/238820  Loss=1.42534  Time Elapsed=5.86h  Time Remaining=1.14h
+Step=205000/238820  Loss=1.53942  Time Elapsed=6.01h  Time Remaining=0.99h
+Step=210000/238820  Loss=1.63360  Time Elapsed=6.16h  Time Remaining=0.84h
+Step=215000/238820  Loss=1.40689  Time Elapsed=6.30h  Time Remaining=0.70h
+Step=220000/238820  Loss=1.35728  Time Elapsed=6.45h  Time Remaining=0.55h
+Step=225000/238820  Loss=1.50614  Time Elapsed=6.59h  Time Remaining=0.41h
+Step=230000/238820  Loss=1.75735  Time Elapsed=6.74h  Time Remaining=0.26h
+Step=235000/238820  Loss=1.86333  Time Elapsed=6.89h  Time Remaining=0.11h
