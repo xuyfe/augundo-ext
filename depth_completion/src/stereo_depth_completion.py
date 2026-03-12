@@ -819,6 +819,17 @@ def run(left_image_path,
 
         time_elapse = time_elapse + (time.time() - time_start)
 
+        # Debug: print depth stats for first 3 samples
+        if idx < 3:
+            d = output_depth.detach()
+            print(f'[DEBUG sample {idx}] depth  min={d.min().item():.4f}  max={d.max().item():.4f}  mean={d.mean().item():.4f}')
+            if is_available_ground_truth:
+                gt = ground_truth
+                gt_valid = gt[gt > 0]
+                print(f'[DEBUG sample {idx}] GT     min={gt_valid.min().item():.4f}  max={gt_valid.max().item():.4f}  mean={gt_valid.mean().item():.4f}')
+            print(f'[DEBUG sample {idx}] image  min={left_image_norm.min().item():.4f}  max={left_image_norm.max().item():.4f}')
+            print(f'[DEBUG sample {idx}] fx={intrinsics[0,0,0].item():.2f}')
+
         output_depth_np = np.squeeze(output_depth.detach().cpu().numpy())
 
         if save_outputs:
