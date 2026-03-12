@@ -108,11 +108,20 @@ class BridgeDepthFlowModelWrapper(object):
         assert right_image is not None, \
             'BridgeDepthFlow is a stereo model and requires right_image'
 
-        depth, disp_est_scale, disp_est = self.model_depth(image, right_image)
+        _, disp_est_scale, disp_est = self.model_depth(image, right_image)
+
+        # Convert pixel-scale disparity to metric depth using stereo formula:
+        #   depth = focal_length * baseline / pixel_disparity
+        # disp_est_scale[0] is (N, 2, H, W); channel 0 is horizontal pixel-scale disparity.
+        # KITTI stereo baseline = 0.54 m.
+        KITTI_BASELINE = 0.54
+        horiz_disp = disp_est_scale[0][:, 0:1, :, :]  # (N, 1, H, W)
+        fx = intrinsics[:, 0, 0].reshape(-1, 1, 1, 1)
+        output_depth = (fx * KITTI_BASELINE) / (torch.abs(horiz_disp).clamp(min=1e-6))
 
         # Clamp depth to valid range
         output_depth = torch.clamp(
-            depth,
+            output_depth,
             min=self.min_predict_depth,
             max=self.max_predict_depth)
 
