@@ -117,6 +117,9 @@ class BridgeDepthFlowModelWrapper(object):
         KITTI_BASELINE = 0.54
         horiz_disp = disp_est_scale[0][:, 0:1, :, :]  # (N, 1, H, W)
         fx = intrinsics[:, 0, 0].reshape(-1, 1, 1, 1)
+        # Debug: print raw disparity stats
+        print(f'[DEBUG BDF] horiz_disp  min={horiz_disp.min().item():.6f}  max={horiz_disp.max().item():.6f}  mean={horiz_disp.mean().item():.6f}')
+        print(f'[DEBUG BDF] fx={fx.flatten()[0].item():.2f}  baseline={KITTI_BASELINE}')
         output_depth = (fx * KITTI_BASELINE) / (torch.abs(horiz_disp).clamp(min=1e-6))
 
         # Clamp depth to valid range
