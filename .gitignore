@@ -5,3 +5,4 @@ augundo-py310env/
 bash/.DS_Store
 checkpoints/
 results/
+PROMPT_DEBUG_RMSE.md
