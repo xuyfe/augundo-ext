@@ -260,9 +260,7 @@ def train(train_data_file,
         network_modules=network_modules,
         min_predict_depth=min_predict_depth,
         max_predict_depth=max_predict_depth,
-        device=device,
-        n_height=n_height,
-        n_width=n_width)
+        device=device)
 
     parameters_depth_model = depth_completion_model.parameters_depth()
 
