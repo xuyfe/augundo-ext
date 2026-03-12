@@ -394,8 +394,21 @@ class UnOSModel(object):
             model_depth_restore_path, map_location=self.device)
 
         if 'model_state_dict' in checkpoint:
-            self.model_depth.load_state_dict(checkpoint['model_state_dict'])
+            sd = checkpoint['model_state_dict']
+            model_keys = set(self.model_depth.state_dict().keys())
+            ckpt_keys = set(sd.keys())
+            missing = model_keys - ckpt_keys
+            unexpected = ckpt_keys - model_keys
+            print(f'[DEBUG restore] checkpoint keys: {len(ckpt_keys)}, model keys: {len(model_keys)}')
+            print(f'[DEBUG restore] first 5 ckpt keys: {sorted(ckpt_keys)[:5]}')
+            print(f'[DEBUG restore] first 5 model keys: {sorted(model_keys)[:5]}')
+            if missing:
+                print(f'[DEBUG restore] MISSING from checkpoint: {sorted(missing)[:5]}...')
+            if unexpected:
+                print(f'[DEBUG restore] UNEXPECTED in checkpoint: {sorted(unexpected)[:5]}...')
+            self.model_depth.load_state_dict(sd)
             train_step = checkpoint.get('train_step', 0)
+            print(f'[DEBUG restore] loaded step {train_step}')
             if optimizer_depth is not None and 'optimizer_state_dict' in checkpoint:
                 optimizer_depth.load_state_dict(checkpoint['optimizer_state_dict'])
         else:
