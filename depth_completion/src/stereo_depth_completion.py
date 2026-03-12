@@ -675,7 +675,10 @@ def run(left_image_path,
         save_outputs,
         keep_input_filenames,
         # Hardware settings
-        device):
+        device,
+        # Inference size (optional; use training size to avoid UnOS pyramid shape mismatch)
+        n_height=None,
+        n_width=None):
 
     # Select device (fallback to CPU or MPS when CUDA not compiled or not available)
     device = _resolve_device(device)
@@ -771,6 +774,28 @@ def run(left_image_path,
 
         if dataloader.dataset.has_ground_truth:
             ground_truth = batch['ground_truth'].to(device)
+
+        # Resize to model size if requested (avoids UnOS/PWC pyramid shape mismatch on arbitrary input sizes)
+        if n_height is not None and n_width is not None:
+            _, _, h, w = left_image.shape
+            if h != n_height or w != n_width:
+                left_image = torch.nn.functional.interpolate(
+                    left_image, size=(n_height, n_width), mode='bilinear', align_corners=False)
+                right_image = torch.nn.functional.interpolate(
+                    right_image, size=(n_height, n_width), mode='bilinear', align_corners=False)
+                sparse_depth = torch.nn.functional.interpolate(
+                    sparse_depth, size=(n_height, n_width), mode='nearest')
+                if dataloader.dataset.has_ground_truth:
+                    ground_truth = torch.nn.functional.interpolate(
+                        ground_truth, size=(n_height, n_width), mode='nearest')
+                # Scale intrinsics: fx,cx *= sx; fy,cy *= sy
+                scale_x = n_width / float(w)
+                scale_y = n_height / float(h)
+                intrinsics = intrinsics.clone()
+                intrinsics[:, 0, 0] *= scale_x
+                intrinsics[:, 0, 2] *= scale_x
+                intrinsics[:, 1, 1] *= scale_y
+                intrinsics[:, 1, 2] *= scale_y
 
         time_start = time.time()
 
