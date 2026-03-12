@@ -93,8 +93,8 @@ class FlowDecoder(nn.Module):
             nn.init.kaiming_normal_(m.weight, a=0.1, nonlinearity='leaky_relu')
             if m.bias is not None:
                 nn.init.zeros_(m.bias)
-        nn.init.zeros_(self.flow.weight)
-        nn.init.zeros_(self.flow.bias)
+        nn.init.kaiming_normal_(self.flow_x.weight, a=0.1, nonlinearity='leaky_relu')
+        nn.init.constant_(self.flow_x.bias, 0.01)
 
     def forward(self, x):
         """

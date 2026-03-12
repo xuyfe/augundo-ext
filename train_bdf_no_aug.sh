@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=train_unos_no_aug
+#SBATCH --job-name=train_bdf
 #SBATCH --time=2-00:00:00
 #SBATCH --mail-type=ALL
 #SBATCH --cpus-per-task=4
@@ -17,15 +17,14 @@ source augundo-ext/augundo-py310env/bin/activate
 
 # SLURM_SUBMIT_DIR = the directory where you ran "sbatch" from (use repo root)
 SENIOR_THESIS="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
-# Run from depth_completion/src so imports resolve; paths below are absolute from repo root
 DEPTH_SRC="$SENIOR_THESIS/augundo-ext/depth_completion/src"
 
-DATA_PATH="${DATA_PATH:-$SENIOR_THESIS/augundo-ext/data/kitti_raw_data}"
-echo "Data dir: $DATA_PATH"
+echo "Data dir: $SENIOR_THESIS/augundo-ext/data/kitti_raw_data"
 echo "CWD:      $DEPTH_SRC"
 
 cd "$DEPTH_SRC" || exit 1
-# learning rates and schedule are from the original paper, as well as image and batch sizes
+# BDF paper (bdf.pdf §4.1): batch 2, 512×256, Adam 1e-4, LR halved every 3 epochs for 5 times (3,6,9,12,15).
+# Augmentations: left-right flip, gamma [0.8,1.2], brightness [0.5,2.0], color shifts [0.8,1.2], each 50% chance.
 python train_stereo_depth_completion.py \
     --model_name bridgedepthflow \
     --network_modules stereo \
@@ -38,6 +37,9 @@ python train_stereo_depth_completion.py \
     --train_data_file "$SENIOR_THESIS/augundo-ext/data/unos_train_4frames.txt" \
     --train_data_root "$SENIOR_THESIS/augundo-ext/data/kitti_raw_data" \
     --checkpoint_path "$SENIOR_THESIS/augundo-ext/checkpoints/bridgedepthflow_stereo" \
-    --no_augment
+    --augmentation_random_flip_type horizontal \
+    --augmentation_random_gamma 0.8 1.2 \
+    --augmentation_random_brightness 0.5 2.0 \
+    --augmentation_random_saturation 0.8 1.2
 
 echo "Training completed"

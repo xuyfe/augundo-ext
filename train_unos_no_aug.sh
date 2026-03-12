@@ -34,9 +34,9 @@ python train_stereo_depth_completion.py \
     --n_batch 4 \
     --n_height 256 \
     --n_width 832 \
-    --learning_rates 1e-4 5e-5 \
-    --learning_schedule 10 20 \
+    --learning_rates 1e-4 \
+    --learning_schedule 20 \
     --checkpoint_path "$SENIOR_THESIS/augundo-ext/checkpoints/unos_stereo" \
-    --no_augment
+    --augmentation_random_flip_type horizontal
 
 echo "Training completed"
