@@ -50,6 +50,8 @@ python run_stereo_depth_completion.py \
     --intrinsics_path "$DATA_DIR/stereo_val_intrinsics.txt" \
     --ground_truth_path "$DATA_DIR/stereo_val_ground_truth.txt" \
     --model_name bridgedepthflow \
+    --n_height 256 \
+    --n_width 512 \
     --restore_paths "$RESTORE_PTH" \
     --output_path "$OUTPUT_DIR" \
     --save_outputs
