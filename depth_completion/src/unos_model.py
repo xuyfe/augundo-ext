@@ -150,13 +150,15 @@ class UnOSModel(object):
         # disps[0] is N x 2 x H/4 x W/4 (left and right disparity)
         disp_left = disps[0][:, 0:1, :, :]  # N x 1 x H/4 x W/4
 
-        # Convert disparity to depth: depth = focal_x / (disp * width_at_scale)
-        _, _, dh, dw = disp_left.shape
-        fx = intrinsics[:, 0, 0].reshape(-1, 1, 1, 1)
-        depth = fx / (disp_left.clamp(min=1e-6) * dw)
-
-        # Upsample depth to original resolution
+        # Convert normalized disparity to metric depth using stereo formula:
+        #   depth = focal_length * baseline / pixel_disparity
+        # Network outputs normalized disparity (sigmoid-scaled, [0, 0.3]).
+        # Pixel disparity = normalized_disp * full_image_width (not quarter-scale width).
+        # KITTI stereo baseline = 0.54 m.
         _, _, orig_h, orig_w = image.shape
+        KITTI_BASELINE = 0.54
+        fx = intrinsics[:, 0, 0].reshape(-1, 1, 1, 1)
+        depth = (fx * KITTI_BASELINE) / (disp_left.clamp(min=1e-6) * orig_w)
         output_depth = F.interpolate(
             depth, size=(orig_h, orig_w),
             mode='bilinear', align_corners=True)
