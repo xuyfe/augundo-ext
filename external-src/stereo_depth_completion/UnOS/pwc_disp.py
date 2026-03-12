@@ -103,9 +103,9 @@ class DispDecoder(nn.Module):
             nn.init.kaiming_normal_(m.weight, a=0.1, nonlinearity='leaky_relu')
             if m.bias is not None:
                 nn.init.zeros_(m.bias)
-        # Flow prediction layer: zero init for stable training start
-        nn.init.zeros_(self.flow_x.weight)
-        nn.init.zeros_(self.flow_x.bias)
+        # Flow prediction layer: small Kaiming init so ReLU gating doesn't kill gradients
+        nn.init.kaiming_normal_(self.flow_x.weight, a=0.1, nonlinearity='leaky_relu')
+        nn.init.constant_(self.flow_x.bias, 0.01)
 
     def forward(self, x):
         """
@@ -169,8 +169,8 @@ class DispContextNet(nn.Module):
             nn.init.kaiming_normal_(m.weight, a=0.1, nonlinearity='leaky_relu')
             if m.bias is not None:
                 nn.init.zeros_(m.bias)
-        nn.init.zeros_(self.flow_x.weight)
-        nn.init.zeros_(self.flow_x.bias)
+        nn.init.kaiming_normal_(self.flow_x.weight, a=0.1, nonlinearity='leaky_relu')
+        nn.init.constant_(self.flow_x.bias, 0.01)
 
     def forward(self, x):
         """
