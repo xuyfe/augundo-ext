@@ -158,6 +158,9 @@ class UnOSModel(object):
         _, _, orig_h, orig_w = image.shape
         KITTI_BASELINE = 0.54
         fx = intrinsics[:, 0, 0].reshape(-1, 1, 1, 1)
+        # Debug: print raw disparity stats
+        print(f'[DEBUG UnOS] disp_left  min={disp_left.min().item():.6f}  max={disp_left.max().item():.6f}  mean={disp_left.mean().item():.6f}')
+        print(f'[DEBUG UnOS] fx={fx.flatten()[0].item():.2f}  orig_w={orig_w}  baseline={KITTI_BASELINE}')
         depth = (fx * KITTI_BASELINE) / (disp_left.clamp(min=1e-6) * orig_w)
         output_depth = F.interpolate(
             depth, size=(orig_h, orig_w),
