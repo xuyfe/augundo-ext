@@ -1,3 +1,10 @@
+import sys
+import os
+# Resolve local packages (models, utils) when run as python -m external_src.stereo_depth_completion.BDF.train
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+if _script_dir not in sys.path:
+    sys.path.insert(0, _script_dir)
+
 import torch
 import torchvision
 import torchvision.transforms as transforms

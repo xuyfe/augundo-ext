@@ -25,6 +25,9 @@ echo "Data dir:       $DATA_PATH"
 echo "Checkpoint dir: $CHECKPOINT_DIR"
 echo "CWD:            $(pwd)"
 
+# Run from augundo-ext so "external_src" resolves; use absolute path for train_file
+cd "$SENIOR_THESIS/augundo-ext" || exit 1
+
 # we're only training the stereo model for now, 100k iterations should be enough according to the paper.
 python -m external_src.stereo_depth_completion.UnOS.main \
     --data_dir "$DATA_PATH" \
@@ -32,7 +35,7 @@ python -m external_src.stereo_depth_completion.UnOS.main \
     --gt_2012_dir "$SENIOR_THESIS/augundo-ext/data/stereo_2012" \
     --gt_2015_dir "$SENIOR_THESIS/augundo-ext/data/scene_flow_2015" \
     --trace "$CHECKPOINT_DIR" \
-    --mode stereo \ 
+    --mode stereo \
     --train_test train \
     --retrain True \
     --batch_size 4 \

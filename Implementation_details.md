@@ -22,6 +22,15 @@ ln -s /path/to/scene_flow_2015 data/
 ln -s /path/to/stereo_2012 data/
 ```
 
+# Clone OpticalFlowToolKit
+
+UnOS uses the OpticalFlowToolKit by Ruoteng Li during their eval phase. 
+
+```bash
+cd augundo-ext/external_src
+git clone https://github.com/liruoteng/OpticalFlowToolkit.git
+```
+
 # Training, with no AugUndo framework
 
 Make sure you're working in the home (root) directory. The parameters are set according to the ones used in the original papers.

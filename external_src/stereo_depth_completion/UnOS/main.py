@@ -6,6 +6,11 @@ import argparse
 import os
 import sys
 
+# Resolve local modules (e.g. flowlib) when run as python -m external_src.stereo_depth_completion.UnOS.main
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+if _script_dir not in sys.path:
+    sys.path.insert(0, _script_dir)
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -17,11 +22,11 @@ from .models import (Model_stereo, Model_flow, Model_depth, Model_depthflow,
 from .test import test
 
 # How often to record tensorboard summaries.
-SUMMARY_INTERVAL = 100
+SUMMARY_INTERVAL = 1000
 # How often to run a batch through the validation model.
 VAL_INTERVAL = 2500
 # How often to save a model checkpoint
-SAVE_INTERVAL = 2500
+SAVE_INTERVAL = 10000
 
 
 def get_args():
