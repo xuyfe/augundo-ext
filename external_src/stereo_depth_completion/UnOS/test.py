@@ -68,7 +68,7 @@ def test(eval_model, itr, gt_flows_2012, noc_masks_2012,
 
         for i in range(total_img_num):
             img1 = cv2.imread(
-                os.path.join(gt_dir, "image_2",
+                os.path.join(gt_dir, "image_0",
                              str(i).zfill(6) + "_10.png"))
             if img1 is None:
                 sys.stderr.write(
@@ -80,19 +80,19 @@ def test(eval_model, itr, gt_flows_2012, noc_masks_2012,
             img1 = cv2.resize(img1, (opt.img_width, opt.img_height))
 
             img2 = cv2.imread(
-                os.path.join(gt_dir, "image_2",
+                os.path.join(gt_dir, "image_0",
                              str(i).zfill(6) + "_11.png"))
             img2 = cv2.cvtColor(img2, cv2.COLOR_BGR2RGB)
             img2 = cv2.resize(img2, (opt.img_width, opt.img_height))
 
             imgr = cv2.imread(
-                os.path.join(gt_dir, "image_3",
+                os.path.join(gt_dir, "image_1",
                              str(i).zfill(6) + "_10.png"))
             imgr = cv2.cvtColor(imgr, cv2.COLOR_BGR2RGB)
             imgr = cv2.resize(imgr, (opt.img_width, opt.img_height))
 
             img2r = cv2.imread(
-                os.path.join(gt_dir, "image_3",
+                os.path.join(gt_dir, "image_1",
                              str(i).zfill(6) + "_11.png"))
             img2r = cv2.cvtColor(img2r, cv2.COLOR_BGR2RGB)
             img2r = cv2.resize(img2r, (opt.img_width, opt.img_height))
@@ -104,7 +104,7 @@ def test(eval_model, itr, gt_flows_2012, noc_masks_2012,
             img2r_t = torch.from_numpy(img2r).unsqueeze(0).to(device)
 
             # Load calibration
-            calib_file = os.path.join(gt_dir, "calib_cam_to_cam",
+            calib_file = os.path.join(gt_dir, "calib",
                                       str(i).zfill(6) + ".txt")
             input_intrinsic = get_scaled_intrinsic_matrix(
                 calib_file,
