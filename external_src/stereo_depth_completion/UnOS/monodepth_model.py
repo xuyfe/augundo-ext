@@ -61,7 +61,7 @@ class MonodepthModel(nn.Module):
     @staticmethod
     def gradient_y(img):
         """img: (N, C, H, W)"""
-        return img[:, :-1, :, :] - img[:, 1:, :, :]
+        return img[:, :, :-1, :] - img[:, :, 1:, :]
 
     @staticmethod
     def scale_pyramid(img, num_scales):
@@ -165,7 +165,7 @@ class MonodepthModel(nn.Module):
             disp_gxx[i] * weights_x[i][:, :, :, :-1] for i in range(4)
         ]
         smoothness_y = [
-            disp_gyy[i] * weights_y[i][:, :-1, :, :] for i in range(4)
+            disp_gyy[i] * weights_y[i][:, :, :-1, :] for i in range(4)
         ]
         return smoothness_x + smoothness_y
 

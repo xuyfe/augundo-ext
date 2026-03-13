@@ -1,9 +1,7 @@
 import numpy as np
 import os
 import cv2
-import skimage
-import skimage.io
-from flowlib import write_flow_png
+from ..flowlib import write_flow_png
 
 
 # Adopted from https://github.com/mrharicot/monodepth
@@ -111,13 +109,13 @@ def write_test_results(test_result_flow_optical, test_result_disp,
                                     str(i).zfill(6) + "_10.png"))
 
         disp0 = W * cv2.resize(disp0, (W, H), interpolation=cv2.INTER_LINEAR)
-        skimage.io.imsave(
+        cv2.imwrite(
             os.path.join(output_dir, mode, "disp_0",
                          str(i).zfill(6) + "_10.png"),
             (disp0 * 256).astype('uint16'))
 
         disp1 = W * cv2.resize(disp1, (W, H), interpolation=cv2.INTER_LINEAR)
-        skimage.io.imsave(
+        cv2.imwrite(
             os.path.join(output_dir, mode, "disp_1",
                          str(i).zfill(6) + "_10.png"),
             (disp1 * 256).astype('uint16'))
