@@ -1,4 +1,5 @@
 # Download Stereo 2012 and Scene Flow 2015
+
 These data sets are used during evaluation for UnOS and BDF
 
 ```bash
@@ -21,6 +22,8 @@ unzip data_scene_flow.zip
 ln -s /path/to/scene_flow_2015 data/
 ln -s /path/to/stereo_2012 data/
 ```
+
+Note, UnOS only uses the `training/` subset. We renamed the 2015 folder names to `image_0`and `image_1` to match the folder names of the 2012 folder. Also, the calibration files for the 2015 folder have to be downloaded separately. So, we downloaded the calibration files and matched the structure of the 2012 folder.
 
 # Clone OpticalFlowToolKit
 
