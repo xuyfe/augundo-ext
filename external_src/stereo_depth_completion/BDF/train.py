@@ -1,5 +1,6 @@
 import sys
 import os
+import time
 # Resolve local packages (models, utils) when run as python -m external_src.stereo_depth_completion.BDF.train
 _script_dir = os.path.dirname(os.path.abspath(__file__))
 if _script_dir not in sys.path:
@@ -18,6 +19,7 @@ import random
 from PIL import Image
 import matplotlib.pyplot as plt
 import cv2
+from torch.utils.tensorboard import SummaryWriter
 from models.MonodepthModel import *
 from models.PWC_net import *
 from models.PWC_net import PWCDCNet
@@ -43,10 +45,22 @@ def get_args():
     parser.add_argument('--num_threads',               type=int,   help='number of threads to use for data loading', default=8)
     parser.add_argument('--checkpoint_path',           type=str,   help='path to a specific checkpoint to load', default='')
     parser.add_argument('--type_of_2warp',             type=int,   help='2warp type', default=0)
+    parser.add_argument('--summary_freq',              type=int,   help='print/log every N iterations', default=100)
     args = parser.parse_args()
     return args
 
 args = get_args()
+
+# Ensure checkpoint path ends with separator so files go inside the directory
+if args.checkpoint_path and not args.checkpoint_path.endswith(os.sep):
+    args.checkpoint_path = args.checkpoint_path + os.sep
+
+print(f"[BDF] Model: {args.model_name}", flush=True)
+print(f"[BDF] Data path: {args.data_path}", flush=True)
+print(f"[BDF] Checkpoint path: {args.checkpoint_path}", flush=True)
+print(f"[BDF] Input size: {args.input_height}x{args.input_width}", flush=True)
+print(f"[BDF] Batch size: {args.batch_size}, Epochs: {args.num_epochs}, LR: {args.learning_rate}", flush=True)
+print(f"[BDF] type_of_2warp: {args.type_of_2warp}", flush=True)
 
 if args.model_name == 'monodepth':
     net = MonodepthNet().cuda()
@@ -54,14 +68,35 @@ elif args.model_name == 'pwc':
     net = pwc_dc_net().cuda()
     args.input_width = 832
 
+print(f"[BDF] Final input size (after model override): {args.input_height}x{args.input_width}", flush=True)
+
 left_image_1, left_image_2, right_image_1, right_image_2 = get_kitti_cycle_data(args.filenames_file, args.data_path)
+print(f"[BDF] Dataset size: {len(left_image_1)} samples", flush=True)
+
 CycleLoader = torch.utils.data.DataLoader(
          myCycleImageFolder(left_image_1, left_image_2, right_image_1, right_image_2, True, args),
          batch_size = args.batch_size, shuffle = True, num_workers = args.num_threads, drop_last = False)
+
+num_batches = len(CycleLoader)
+print(f"[BDF] Batches per epoch: {num_batches}", flush=True)
+
 optimizer = optim.Adam(net.parameters(), lr = args.learning_rate)
 scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[4, 7, 10, 13], gamma=0.5)
 
+# TensorBoard
+tb_dir = os.path.join(os.path.dirname(args.checkpoint_path.rstrip(os.sep)), "tb_bdf")
+os.makedirs(tb_dir, exist_ok=True)
+writer = SummaryWriter(tb_dir)
+print(f"[BDF] TensorBoard log dir: {tb_dir}", flush=True)
+
+global_step = 0
+
+print(f"[BDF] Starting training...", flush=True)
+
 for epoch in range(args.num_epochs):
+    epoch_start = time.time()
+    epoch_loss_sum = 0.0
+    epoch_count = 0
 
     for batch_idx, (left_image_1, left_image_2, right_image_1, right_image_2) in enumerate(CycleLoader, 0):
 
@@ -179,21 +214,51 @@ for epoch in range(args.num_epochs):
             loss += 0.1 * sum([warp_2(warp2_est_2[i], right_pyramid[i][[6,7]], mask_2[i], args) for i in range(4)])
 
         loss.backward()
-
-        if args.model_name == 'monodepth':
-            print("Epoch :", epoch)
-            print("Batch Index :", batch_idx)
-            print(net.conv1.weight.grad[0,0,0,0])
-        elif args.model_name == 'pwc':
-            print("Epoch :", epoch)
-            print("Batch Index :", batch_idx)
-            print(net.conv1a[0].weight.grad[0,0,0,0])
-
         optimizer.step()
+
+        loss_val = loss.item()
+        epoch_loss_sum += loss_val
+        epoch_count += 1
+        global_step += 1
+
+        # Log every summary_freq iterations
+        if global_step % args.summary_freq == 0:
+            img_loss_val = image_loss.item() + image_loss_2.item()
+            disp_grad_val = disp_gradient_loss.item() + disp_gradient_loss_2.item()
+            lr_loss_val = lr_loss.item()
+            current_lr = optimizer.param_groups[0]['lr']
+
+            print(f"[BDF] Epoch {epoch}/{args.num_epochs} | "
+                  f"Batch {batch_idx}/{num_batches} | "
+                  f"Step {global_step} | "
+                  f"Loss: {loss_val:.4f} | "
+                  f"Image: {img_loss_val:.4f} | "
+                  f"Disp Smooth: {disp_grad_val:.4f} | "
+                  f"LR Consist: {lr_loss_val:.4f} | "
+                  f"lr: {current_lr:.6f}",
+                  flush=True)
+
+            writer.add_scalar('loss/total', loss_val, global_step)
+            writer.add_scalar('loss/image', img_loss_val, global_step)
+            writer.add_scalar('loss/disp_gradient', disp_grad_val, global_step)
+            writer.add_scalar('loss/lr_consistency', lr_loss_val, global_step)
+            writer.add_scalar('params/learning_rate', current_lr, global_step)
 
     scheduler.step()
 
-    if epoch % 1 == 0:
-        state = {'epoch': epoch, 'state_dict': net.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler}
-        torch.save(state, args.checkpoint_path + "model_epoch" + str(epoch))
-        print("The model of epoch ", epoch, "has been saved.")
+    epoch_elapsed = time.time() - epoch_start
+    avg_loss = epoch_loss_sum / max(epoch_count, 1)
+    print(f"[BDF] Epoch {epoch} complete | "
+          f"Avg Loss: {avg_loss:.4f} | "
+          f"Time: {epoch_elapsed:.1f}s | "
+          f"LR: {optimizer.param_groups[0]['lr']:.6f}",
+          flush=True)
+
+    # Save checkpoint every epoch
+    ckpt_path = os.path.join(args.checkpoint_path, f"model_epoch{epoch}")
+    state = {'epoch': epoch, 'state_dict': net.state_dict(), 'optimizer': optimizer.state_dict(), 'scheduler': scheduler}
+    torch.save(state, ckpt_path)
+    print(f"[BDF] Checkpoint saved: {ckpt_path}", flush=True)
+
+writer.close()
+print("[BDF] Training finished.", flush=True)

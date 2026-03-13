@@ -24,20 +24,23 @@ echo "Data dir:       $DATA_PATH"
 echo "Checkpoint dir: $CHECKPOINT_DIR"
 echo "CWD:            $(pwd)"
 
+# Run from augundo-ext so "external_src" resolves
+cd "$SENIOR_THESIS/augundo-ext" || exit 1
+
 # Evaluate optical flow
-python -m external_src.stereo_depth_completion.BDF.test_flow \
+python -u -m external_src.stereo_depth_completion.BDF.test_flow \
     --data_path "$DATA_PATH" \
     --filenames_file "$BDF_SRC/utils/filenames/kitti_flow_val_files_occ_200.txt" \
     --checkpoint_path "$CHECKPOINT_DIR/latest.pt"
 
 # Evaluate stereo matching
-python -m external_src.stereo_depth_completion.BDF.test_stereo \
+python -u -m external_src.stereo_depth_completion.BDF.test_stereo \
     --data_path "$DATA_PATH" \
     --filenames_file "$BDF_SRC/utils/filenames/kitti_stereo_2015_test_files.txt" \
     --checkpoint_path "$CHECKPOINT_DIR/latest.pt"
 
 # Evaluate stereo depth metrics
-python -m external_src.stereo_depth_completion.BDF.utils.evaluate_kitti \
+python -u -m external_src.stereo_depth_completion.BDF.utils.evaluate_kitti \
     --split kitti \
     --predicted_disp_path ./disparities.npy \
     --gt_path "$SENIOR_THESIS/augundo-ext/data/kitti_raw_data"
