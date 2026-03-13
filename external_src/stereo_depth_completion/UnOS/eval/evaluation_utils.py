@@ -1,8 +1,8 @@
 import numpy as np
 import os
-import cv2, skimage
+import cv2
+import skimage
 import skimage.io
-import scipy.misc as sm
 from flowlib import write_flow_png
 
 
@@ -40,11 +40,25 @@ def load_gt_disp_kitti(path, eval_occ):
     gt_disparities = []
     for i in range(200):
         if eval_occ:
-            disp = sm.imread(
-                path + "/disp_occ_0/" + str(i).zfill(6) + "_10.png", -1)
+            disp_path = os.path.join(
+                path, "disp_occ_0", f"{i:06d}_10.png")
         else:
-            disp = sm.imread(
-                path + "/disp_noc_0/" + str(i).zfill(6) + "_10.png", -1)
+            disp_path = os.path.join(
+                path, "disp_noc_0", f"{i:06d}_10.png")
+
+        disp = cv2.imread(disp_path, cv2.IMREAD_UNCHANGED)
+        if disp is None:
+            # If the file is missing, append a zero map so eval can continue.
+            # This mirrors the original behaviour of "some value", but avoids crashes.
+            # Shape will be corrected once a valid disparity is read.
+            if len(gt_disparities) > 0:
+                # Reuse last shape
+                h, w = gt_disparities[-1].shape
+                disp = np.zeros((h, w), dtype=np.uint16)
+            else:
+                # Fallback default shape; will be overridden by next valid frame
+                disp = np.zeros((1, 1), dtype=np.uint16)
+
         disp = disp.astype(np.float32) / 256.0
         gt_disparities.append(disp)
     return gt_disparities

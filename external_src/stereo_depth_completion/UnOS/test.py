@@ -97,11 +97,11 @@ def test(eval_model, itr, gt_flows_2012, noc_masks_2012,
             img2r = cv2.cvtColor(img2r, cv2.COLOR_BGR2RGB)
             img2r = cv2.resize(img2r, (opt.img_width, opt.img_height))
 
-            # To tensor (B, H, W, 3) uint8 for eval model interface
-            img1_t = torch.from_numpy(img1).unsqueeze(0).to(device)
-            img2_t = torch.from_numpy(img2).unsqueeze(0).to(device)
-            imgr_t = torch.from_numpy(imgr).unsqueeze(0).to(device)
-            img2r_t = torch.from_numpy(img2r).unsqueeze(0).to(device)
+            # To tensor (B, 3, H, W) uint8 for eval model interface
+            img1_t = torch.from_numpy(img1).unsqueeze(0).permute(0, 3, 1, 2).to(device)
+            img2_t = torch.from_numpy(img2).unsqueeze(0).permute(0, 3, 1, 2).to(device)
+            imgr_t = torch.from_numpy(imgr).unsqueeze(0).permute(0, 3, 1, 2).to(device)
+            img2r_t = torch.from_numpy(img2r).unsqueeze(0).permute(0, 3, 1, 2).to(device)
 
             # Load calibration
             calib_file = os.path.join(gt_dir, "calib",
