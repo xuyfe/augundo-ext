@@ -14,6 +14,8 @@ module load cuDNN
 
 source augundo-ext/augundo-py310env/bin/activate
 
+export TF_CPP_MIN_LOG_LEVEL=3
+
 SENIOR_THESIS="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 BDF_SRC="$SENIOR_THESIS/augundo-ext/external_src/stereo_depth_completion/BDF"
 
@@ -40,6 +42,7 @@ python -u -m external_src.stereo_depth_completion.BDF.train \
     --learning_rate 1e-4 \
     --alpha_image_loss 0.85 \
     --disp_gradient_loss_weight 0.1 \
-    --type_of_2warp 0
+    --type_of_2warp 0 \
+    --num_threads 4
 
 echo "Training completed"
