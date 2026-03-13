@@ -30,7 +30,7 @@ cd "$SENIOR_THESIS/augundo-ext" || exit 1
 
 python -m external_src.stereo_depth_completion.BDF.train \
     --data_path "$DATA_PATH" \
-    --filenames_file "$BDF_SRC/utils/filenames/kitti_train_files_png_4frames.txt" \
+    --filenames_file "$BDF_SRC/utils/filenames/kitti_train_files_png_4frames_png.txt" \
     --checkpoint_path "$CHECKPOINT_DIR" \
     --model_name pwc \
     --input_height 256 \

@@ -1,3 +1,4 @@
+import os
 import torch
 import torchvision
 import torchvision.transforms as transforms
@@ -13,6 +14,9 @@ import matplotlib.pyplot as plt
 import cv2
 
 def get_kitti_cycle_data(file_path_train, path):
+    path = os.path.normpath(path)
+    if not path.endswith(os.sep):
+        path = path + os.sep
     f_train = open(file_path_train)
     former_left_image_train = list()
     latter_left_image_train = list()
@@ -20,34 +24,49 @@ def get_kitti_cycle_data(file_path_train, path):
     latter_right_image_train = list()
 
     for line in f_train:
-        former_left_image_train.append(path+line.split()[0])
-        latter_left_image_train.append(path+line.split()[2])
-        former_right_image_train.append(path+line.split()[1])
-        latter_right_image_train.append(path+line.split()[3])
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        former_left_image_train.append(path + parts[0])
+        latter_left_image_train.append(path + parts[2])
+        former_right_image_train.append(path + parts[1])
+        latter_right_image_train.append(path + parts[3])
 
     return former_left_image_train, latter_left_image_train, former_right_image_train, latter_right_image_train
 
 def get_data(file_path_test, path):
+    path = os.path.normpath(path)
+    if not path.endswith(os.sep):
+        path = path + os.sep
     f_test = open(file_path_test)
     left_image_test = list()
     right_image_test = list()
 
     for line in f_test:
-        left_image_test.append(path+line.split()[0])
-        right_image_test.append(path+line.split()[1])
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        left_image_test.append(path + parts[0])
+        right_image_test.append(path + parts[1])
 
     return left_image_test, right_image_test
 
 def get_flow_data(file_path_test, path):
+    path = os.path.normpath(path)
+    if not path.endswith(os.sep):
+        path = path + os.sep
     f_test = open(file_path_test)
     flow_test = list()
     former_image_test = list()
     latter_image_test = list()
 
     for line in f_test:
-        former_image_test.append(path+line.split()[0])
-        latter_image_test.append(path+line.split()[1])
-        flow_test.append(path+line.split()[2])
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        former_image_test.append(path + parts[0])
+        latter_image_test.append(path + parts[1])
+        flow_test.append(path + parts[2])
 
     return former_image_test, latter_image_test, flow_test
 

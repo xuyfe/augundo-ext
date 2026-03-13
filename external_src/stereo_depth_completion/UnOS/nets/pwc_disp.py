@@ -322,9 +322,11 @@ class PWCDisp(nn.Module):
     Replaces ``pwc_disp(image1, image2, feature1, feature2)`` in the original.
     """
 
-    def __init__(self):
+    def __init__(self, feature_pyramid=None):
         super().__init__()
-        self.feature_pyramid = FeaturePyramidDisp()
+        # Allow external feature pyramid to be passed in (for weight sharing)
+        # while keeping a default for standalone use.
+        self.feature_pyramid = feature_pyramid if feature_pyramid is not None else FeaturePyramidDisp()
         self.left_disp = PWCDispDecoder()
         self.right_disp = PWCDispDecoder()
 
