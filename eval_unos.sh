@@ -24,11 +24,14 @@ echo "Data dir:       $DATA_PATH"
 echo "Checkpoint dir: $CHECKPOINT_DIR"
 echo "CWD:            $(pwd)"
 
+# Run from augundo-ext so "external_src" resolves
+cd "$SENIOR_THESIS/augundo-ext" || exit 1
+
 python -m external_src.stereo_depth_completion.UnOS.main \
     --data_dir "$DATA_PATH" \
     --train_file "$UNOS_SRC/filenames/kitti_train_files_png_4frames.txt" \
-    --gt_2012_dir "$SENIOR_THESIS/augundo-ext/data/stereo_2012" \
-    --gt_2015_dir "$SENIOR_THESIS/augundo-ext/data/scene_flow_2015" \
+    --gt_2012_dir "$SENIOR_THESIS/augundo-ext/data/stereo_2012/training" \
+    --gt_2015_dir "$SENIOR_THESIS/augundo-ext/data/scene_flow_2015/training" \
     --trace "$CHECKPOINT_DIR" \
     --mode stereo \
     --train_test test \

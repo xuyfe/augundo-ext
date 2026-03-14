@@ -44,7 +44,7 @@ To train (and evaluate) UnOS:
 sbatch augundo-ext/train_unos.sh
 ```
 
-Note: UnOS training also runs evaluation. But, if you want to run only an inference test:
+Note: UnOS training also runs evaluation on the *training* sets of KITTI 2012 and KITTI 2015. But, if you want to run only an inference test:
 
 ```bash
 sbatch augundo-ext/eval_unos.sh

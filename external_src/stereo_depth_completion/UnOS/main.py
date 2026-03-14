@@ -145,8 +145,7 @@ def main():
     # Load pretrained if specified
     start_itr = 0
     if opt.pretrained_model:
-        checkpoint = torch.load(opt.pretrained_model, map_location=device,
-                                weights_only=False)
+        checkpoint = torch.load(opt.pretrained_model, map_location=device)
         if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
             # Full checkpoint
             if opt.train_test == 'test' or (not opt.retrain):
