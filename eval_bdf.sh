@@ -44,15 +44,16 @@ cd "$SENIOR_THESIS/augundo-ext" || exit 1
 #    --checkpoint_path "$CHECKPOINT_FILE"
 
 # Evaluate stereo matching
-python -u -m external_src.stereo_depth_completion.BDF.test_stereo \
-    --data_path "$DATA_PATH" \
-    --filenames_file "$BDF_SRC/utils/filenames/kitti_stereo_2015_test_files_image_01.txt" \
-    --checkpoint_path "$CHECKPOINT_FILE"
+# python -u -m external_src.stereo_depth_completion.BDF.test_stereo \
+#    --data_path "$DATA_PATH" \
+#    --filenames_file "$BDF_SRC/utils/filenames/kitti_stereo_2015_test_files_image_01.txt" \
+#    --checkpoint_path "$CHECKPOINT_FILE"
 
-# Evaluate stereo depth metrics (run after test_stereo.py)
-# python -u -m external_src.stereo_depth_completion.BDF.utils.evaluate_kitti \
-#    --split kitti \
-#    --predicted_disp_path ./disparities.npy \
-#    --gt_path "$SENIOR_THESIS/augundo-ext/data/kitti_raw_data"
+# Evaluate stereo depth metrics (run after test_stereo.py).
+# GT disparities for KITTI 2015 are under scene_flow_2015/training/disp_occ_0/
+python -u -m external_src.stereo_depth_completion.BDF.utils.evaluate_kitti \
+    --split kitti \
+    --predicted_disp_path ./disparities.npy \
+    --gt_path "$SENIOR_THESIS/augundo-ext/data/scene_flow_2015"
 
 echo "Evaluation completed"

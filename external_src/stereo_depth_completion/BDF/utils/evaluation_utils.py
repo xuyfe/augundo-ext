@@ -34,8 +34,15 @@ width_to_focal[1238] = 718.3351
 
 def load_gt_disp_kitti(path):
     gt_disparities = []
+    base = os.path.normpath(path)
     for i in range(200):
-        disp = cv2.imread(path + "/training/disp_occ_0/" + str(i).zfill(6) + "_10.png", -1)
+        disp_path = os.path.join(base, "training", "disp_occ_0", str(i).zfill(6) + "_10.png")
+        disp = cv2.imread(disp_path, cv2.IMREAD_UNCHANGED)
+        if disp is None:
+            raise FileNotFoundError(
+                "Ground truth disparity not found: {}. "
+                "Ensure --gt_path points to the KITTI 2015 scene flow root (e.g. scene_flow_2015), "
+                "which contains training/disp_occ_0/.".format(disp_path))
         disp = disp.astype(np.float32) / 256
         gt_disparities.append(disp)
     return gt_disparities

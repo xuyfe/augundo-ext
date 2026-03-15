@@ -7,3 +7,4 @@ checkpoints/
 augundo-py310env/
 external_src/stereo_depth_completion/UnOS/optical_flow_toolkit/
 external_src/OpticalFlowToolkit/
+disparities.npy
