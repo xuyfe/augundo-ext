@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=train_bdf
+#SBATCH --job-name=train_bdf_monodepth
 #SBATCH --time=2-00:00:00
 #SBATCH --mail-type=ALL
 #SBATCH --cpus-per-task=4
@@ -20,7 +20,7 @@ SENIOR_THESIS="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 BDF_SRC="$SENIOR_THESIS/augundo-ext/external_src/stereo_depth_completion/BDF"
 
 DATA_PATH="${DATA_PATH:-$SENIOR_THESIS/augundo-ext/data/kitti_raw_data}"
-CHECKPOINT_DIR="$SENIOR_THESIS/augundo-ext/checkpoints/bdf"
+CHECKPOINT_DIR="$SENIOR_THESIS/augundo-ext/checkpoints/bdf_monodepth"
 mkdir -p "$CHECKPOINT_DIR"
 
 echo "Data dir:       $DATA_PATH"
@@ -34,7 +34,7 @@ python -u -m external_src.stereo_depth_completion.BDF.train \
     --data_path "$DATA_PATH" \
     --filenames_file "$BDF_SRC/utils/filenames/kitti_train_files_png_4frames_png.txt" \
     --checkpoint_path "$CHECKPOINT_DIR" \
-    --model_name pwc \
+    --model_name monodepth \
     --input_height 256 \
     --input_width 512 \
     --batch_size 2 \

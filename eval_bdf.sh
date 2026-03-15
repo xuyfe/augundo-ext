@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=eval_bdf
-#SBATCH --time=2-00:00:00
+#SBATCH --job-name=eval_bdf_monodepth
+#SBATCH --time=1-00:00:00
 #SBATCH --mail-type=ALL
 #SBATCH --cpus-per-task=4
 #SBATCH --ntasks=1
@@ -18,31 +18,41 @@ SENIOR_THESIS="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 BDF_SRC="$SENIOR_THESIS/augundo-ext/external_src/stereo_depth_completion/BDF"
 
 DATA_PATH="${DATA_PATH:-$SENIOR_THESIS/augundo-ext/data/scene_flow_2015}"
-CHECKPOINT_DIR="$SENIOR_THESIS/augundo-ext/checkpoints/bdf"
+CHECKPOINT_DIR="$SENIOR_THESIS/augundo-ext/checkpoints/bdf_monodepth"
+
+# BDF saves checkpoints as model_epoch0, model_epoch1, ... (no .pt extension).
+# Use CHECKPOINT_FILE for a specific file, or leave unset to use latest model_epoch* in CHECKPOINT_DIR.
+if [[ -z "${CHECKPOINT_FILE}" ]]; then
+  CHECKPOINT_FILE=$(ls -t "$CHECKPOINT_DIR"/model_epoch* 2>/dev/null | head -1)
+  if [[ -z "$CHECKPOINT_FILE" ]]; then
+    echo "Error: no model_epoch* found in $CHECKPOINT_DIR"
+    exit 1
+  fi
+fi
 
 echo "Data dir:       $DATA_PATH"
-echo "Checkpoint dir: $CHECKPOINT_DIR"
+echo "Checkpoint:     $CHECKPOINT_FILE"
 echo "CWD:            $(pwd)"
 
 # Run from augundo-ext so "external_src" resolves
 cd "$SENIOR_THESIS/augundo-ext" || exit 1
 
 # Evaluate optical flow
-python -u -m external_src.stereo_depth_completion.BDF.test_flow \
-    --data_path "$DATA_PATH" \
-    --filenames_file "$BDF_SRC/utils/filenames/kitti_flow_val_files_occ_200.txt" \
-    --checkpoint_path "$CHECKPOINT_DIR/latest.pt"
+#python -u -m external_src.stereo_depth_completion.BDF.test_flow \
+#    --data_path "$DATA_PATH" \
+#    --filenames_file "$BDF_SRC/utils/filenames/kitti_flow_val_files_occ_200.txt" \
+#    --checkpoint_path "$CHECKPOINT_FILE"
 
 # Evaluate stereo matching
 python -u -m external_src.stereo_depth_completion.BDF.test_stereo \
     --data_path "$DATA_PATH" \
-    --filenames_file "$BDF_SRC/utils/filenames/kitti_stereo_2015_test_files.txt" \
-    --checkpoint_path "$CHECKPOINT_DIR/latest.pt"
+    --filenames_file "$BDF_SRC/utils/filenames/kitti_stereo_2015_test_files_image_01.txt" \
+    --checkpoint_path "$CHECKPOINT_FILE"
 
-# Evaluate stereo depth metrics
-python -u -m external_src.stereo_depth_completion.BDF.utils.evaluate_kitti \
-    --split kitti \
-    --predicted_disp_path ./disparities.npy \
-    --gt_path "$SENIOR_THESIS/augundo-ext/data/kitti_raw_data"
+# Evaluate stereo depth metrics (run after test_stereo.py)
+# python -u -m external_src.stereo_depth_completion.BDF.utils.evaluate_kitti \
+#    --split kitti \
+#    --predicted_disp_path ./disparities.npy \
+#    --gt_path "$SENIOR_THESIS/augundo-ext/data/kitti_raw_data"
 
 echo "Evaluation completed"

@@ -38,7 +38,7 @@ def get_args():
 
 args = get_args()
 
-checkpoint = torch.load(args.checkpoint_path, map_location='cpu', weights_only=False)
+checkpoint = torch.load(args.checkpoint_path, map_location='cpu')
 if args.model_name == 'monodepth':
     net = MonodepthNet().cuda()
 elif args.model_name == 'pwc':
