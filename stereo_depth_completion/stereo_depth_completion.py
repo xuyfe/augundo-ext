@@ -337,7 +337,8 @@ def train(model_name,
           learning_rate=1e-4,
           learning_rates=None,
           learning_schedule=None,
-          num_epochs=80,
+          num_epochs=None,
+          num_iterations=None,
           # Logging
           checkpoint_path='',
           n_step_per_checkpoint=1000,
@@ -393,11 +394,16 @@ def train(model_name,
     # Optimizer
     optimizer = torch.optim.Adam(model_wrapper.parameters(), lr=learning_rate)
 
+    # Determine training mode: iteration-based or epoch-based
+    use_iterations = num_iterations is not None
+    if not use_iterations and num_epochs is None:
+        num_epochs = 80  # fallback default
+
     # Learning rate schedule
     if learning_rates is None:
         learning_rates = [learning_rate]
     if learning_schedule is None:
-        learning_schedule = [num_epochs]
+        learning_schedule = [num_epochs if num_epochs else num_iterations]
 
     learning_schedule_pos = 0
     current_lr = learning_rates[0]
@@ -406,129 +412,144 @@ def train(model_name,
     train_step = 0
     time_start = time.time()
 
-    log('Starting stereo AugUndo training for model: {}'.format(model_name), log_path)
+    if use_iterations:
+        log('Starting stereo AugUndo training for model: {} ({} iterations)'.format(
+            model_name, num_iterations), log_path)
+    else:
+        log('Starting stereo AugUndo training for model: {} ({} epochs)'.format(
+            model_name, num_epochs), log_path)
     log('Augmentation probability: {}'.format(augmentation_probability), log_path)
 
-    for epoch in range(num_epochs):
+    def _run_one_step(batch_data, train_step, epoch):
+        """Run a single training step. Returns (loss, loss_info)."""
 
-        # Update learning rate schedule
-        if learning_schedule_pos < len(learning_schedule) - 1:
-            if epoch > learning_schedule[learning_schedule_pos]:
-                learning_schedule_pos += 1
-                current_lr = learning_rates[min(learning_schedule_pos, len(learning_rates) - 1)]
-                for g in optimizer.param_groups:
-                    g['lr'] = current_lr
+        if model_name == 'bdf':
+            # BDF dataloader returns: (left_t, left_t1, right_t, right_t1)
+            left_t, left_t1, right_t, right_t1 = [b.to(device) for b in batch_data]
 
-        for batch_idx, batch_data in enumerate(dataloader):
-            train_step += 1
+            # Apply photometric augmentation (same params for all 4 images)
+            aug_left_t, aug_right_t, aug_left_t1, aug_right_t1 = \
+                apply_stereo_photometric_augmentation(
+                    transforms_photometric,
+                    left_t, right_t, left_t1, right_t1,
+                    augmentation_probability=augmentation_probability)
 
-            if model_name == 'bdf':
-                # BDF dataloader returns: (left_t, left_t1, right_t, right_t1)
-                left_t, left_t1, right_t, right_t1 = [b.to(device) for b in batch_data]
-
-                # Apply photometric augmentation (same params for all 4 images)
-                aug_left_t, aug_right_t, aug_left_t1, aug_right_t1 = \
-                    apply_stereo_photometric_augmentation(
-                        transforms_photometric,
-                        left_t, right_t, left_t1, right_t1,
-                        augmentation_probability=augmentation_probability)
-
-                # Apply geometric augmentation (same T_ge for all 4 images)
-                (aug_left_t, aug_right_t, aug_left_t1, aug_right_t1), \
-                    transform_performed = apply_stereo_geometric_augmentation(
-                        transforms_geometric,
-                        aug_left_t, aug_right_t, aug_left_t1, aug_right_t1,
-                        augmentation_probability=augmentation_probability,
-                        padding_mode=augmentation_padding_mode)
-
-                # Forward pass in augmented frame
-                output = model_wrapper.forward(
-                    aug_left_t, aug_right_t, aug_left_t1, aug_right_t1)
-
-                # Undo geometric augmentation on disparity output is handled
-                # implicitly here because the loss is computed using the
-                # augmented images (former/latter) which are already in the
-                # augmented frame. The BDF loss operates entirely in the
-                # augmented coordinate frame since it uses photometric
-                # reconstruction between the augmented images.
-                #
-                # Note: The "undo" concept in AugUndo means that the loss
-                # supervision signal (original images) should not be resampled.
-                # For BDF, the photometric loss is self-supervised between
-                # augmented images, so undo is not strictly necessary for the
-                # image reconstruction terms. However, for evaluation and
-                # consistency, we keep the framework structure.
-
-                # Compute loss
-                batch_dict = {
-                    'image_left_t': left_t,
-                    'image_right_t': right_t,
-                    'image_left_t1': left_t1,
-                    'image_right_t1': right_t1,
-                }
-                loss, loss_info = model_wrapper.compute_loss(output, batch_dict)
-
-            elif model_name == 'unos':
-                # UnOS dataloader returns: (left, right, next_left, next_right, cam2pix, pix2cam)
-                left_t, right_t, left_t1, right_t1, batch_cam2pix, batch_pix2cam = \
-                    [b.to(device) for b in batch_data]
-
-                # Apply photometric augmentation
-                aug_left_t, aug_right_t, aug_left_t1, aug_right_t1 = \
-                    apply_stereo_photometric_augmentation(
-                        transforms_photometric,
-                        left_t, right_t, left_t1, right_t1,
-                        augmentation_probability=augmentation_probability)
-
-                # Apply geometric augmentation
-                (aug_left_t, aug_right_t, aug_left_t1, aug_right_t1), \
-                    transform_performed = apply_stereo_geometric_augmentation(
-                        transforms_geometric,
-                        aug_left_t, aug_right_t, aug_left_t1, aug_right_t1,
-                        augmentation_probability=augmentation_probability,
-                        padding_mode=augmentation_padding_mode)
-
-                # Forward pass (UnOS computes loss internally)
-                loss, loss_info = model_wrapper.forward(
+            # Apply geometric augmentation (same T_ge for all 4 images)
+            (aug_left_t, aug_right_t, aug_left_t1, aug_right_t1), \
+                transform_performed = apply_stereo_geometric_augmentation(
+                    transforms_geometric,
                     aug_left_t, aug_right_t, aug_left_t1, aug_right_t1,
-                    batch_cam2pix, batch_pix2cam)
+                    augmentation_probability=augmentation_probability,
+                    padding_mode=augmentation_padding_mode)
 
-                if isinstance(loss, torch.Tensor) and loss.dim() > 0:
-                    loss = loss.mean()
+            # Forward pass in augmented frame
+            output = model_wrapper.forward(
+                aug_left_t, aug_right_t, aug_left_t1, aug_right_t1)
 
-            else:
-                raise ValueError('Unknown model: {}'.format(model_name))
+            # Compute loss
+            batch_dict = {
+                'image_left_t': left_t,
+                'image_right_t': right_t,
+                'image_left_t1': left_t1,
+                'image_right_t1': right_t1,
+            }
+            loss, loss_info = model_wrapper.compute_loss(output, batch_dict)
 
-            # Backpropagation
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+        elif model_name == 'unos':
+            # UnOS dataloader returns: (left, right, next_left, next_right, cam2pix, pix2cam)
+            left_t, right_t, left_t1, right_t1, batch_cam2pix, batch_pix2cam = \
+                [b.to(device) for b in batch_data]
 
-            # Logging
-            if train_step % n_step_per_summary == 0:
-                loss_val = loss.item()
-                time_elapsed = (time.time() - time_start) / 3600
+            # Apply photometric augmentation
+            aug_left_t, aug_right_t, aug_left_t1, aug_right_t1 = \
+                apply_stereo_photometric_augmentation(
+                    transforms_photometric,
+                    left_t, right_t, left_t1, right_t1,
+                    augmentation_probability=augmentation_probability)
 
-                log_msg = 'Step={:6d}  Epoch={:3d}  Loss={:.5f}  Time={:.2f}h'.format(
-                    train_step, epoch, loss_val, time_elapsed)
+            # Apply geometric augmentation
+            (aug_left_t, aug_right_t, aug_left_t1, aug_right_t1), \
+                transform_performed = apply_stereo_geometric_augmentation(
+                    transforms_geometric,
+                    aug_left_t, aug_right_t, aug_left_t1, aug_right_t1,
+                    augmentation_probability=augmentation_probability,
+                    padding_mode=augmentation_padding_mode)
 
-                if isinstance(loss_info, dict):
-                    for key, val in loss_info.items():
-                        if isinstance(val, (int, float)):
-                            summary_writer.add_scalar('train/{}'.format(key), val, train_step)
+            # Forward pass (UnOS computes loss internally)
+            loss, loss_info = model_wrapper.forward(
+                aug_left_t, aug_right_t, aug_left_t1, aug_right_t1,
+                batch_cam2pix, batch_pix2cam)
 
-                summary_writer.add_scalar('train/total_loss', loss_val, train_step)
-                summary_writer.add_scalar('train/learning_rate', current_lr, train_step)
+            if isinstance(loss, torch.Tensor) and loss.dim() > 0:
+                loss = loss.mean()
 
-                log(log_msg, log_path)
+        else:
+            raise ValueError('Unknown model: {}'.format(model_name))
 
-            # Checkpointing
-            if train_step % n_step_per_checkpoint == 0:
-                ckpt_dir = checkpoint_path + 'step-{:06d}'.format(train_step)
-                os.makedirs(ckpt_dir, exist_ok=True)
-                ckpt_file = os.path.join(ckpt_dir, '{}_model.pth'.format(model_name))
-                model_wrapper.save_model(ckpt_file, train_step, optimizer)
-                log('Checkpoint saved: {}'.format(ckpt_file), log_path)
+        # Backpropagation
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        # Logging
+        if train_step % n_step_per_summary == 0:
+            loss_val = loss.item()
+            time_elapsed = (time.time() - time_start) / 3600
+
+            log_msg = 'Step={:6d}  Epoch={:3d}  Loss={:.5f}  Time={:.2f}h'.format(
+                train_step, epoch, loss_val, time_elapsed)
+
+            if isinstance(loss_info, dict):
+                for key, val in loss_info.items():
+                    if isinstance(val, (int, float)):
+                        summary_writer.add_scalar('train/{}'.format(key), val, train_step)
+
+            summary_writer.add_scalar('train/total_loss', loss_val, train_step)
+            summary_writer.add_scalar('train/learning_rate', current_lr, train_step)
+
+            log(log_msg, log_path)
+
+        # Checkpointing
+        if train_step % n_step_per_checkpoint == 0:
+            ckpt_dir = checkpoint_path + 'step-{:06d}'.format(train_step)
+            os.makedirs(ckpt_dir, exist_ok=True)
+            ckpt_file = os.path.join(ckpt_dir, '{}_model.pth'.format(model_name))
+            model_wrapper.save_model(ckpt_file, train_step, optimizer)
+            log('Checkpoint saved: {}'.format(ckpt_file), log_path)
+
+        return loss, loss_info
+
+    if use_iterations:
+        # Iteration-based training: loop over dataloader, restarting when exhausted
+        data_iter = iter(dataloader)
+        epoch = 0
+
+        for itr in range(num_iterations):
+            train_step = itr + 1
+
+            try:
+                batch_data = next(data_iter)
+            except StopIteration:
+                epoch += 1
+                data_iter = iter(dataloader)
+                batch_data = next(data_iter)
+
+            _run_one_step(batch_data, train_step, epoch)
+    else:
+        # Epoch-based training
+        for epoch in range(num_epochs):
+
+            # Update learning rate schedule
+            if learning_schedule_pos < len(learning_schedule) - 1:
+                if epoch > learning_schedule[learning_schedule_pos]:
+                    learning_schedule_pos += 1
+                    current_lr = learning_rates[min(learning_schedule_pos, len(learning_rates) - 1)]
+                    for g in optimizer.param_groups:
+                        g['lr'] = current_lr
+
+            for batch_idx, batch_data in enumerate(dataloader):
+                train_step += 1
+                _run_one_step(batch_data, train_step, epoch)
 
     # Final checkpoint
     ckpt_dir = checkpoint_path + 'final'
