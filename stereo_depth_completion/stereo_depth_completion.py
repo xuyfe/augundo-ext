@@ -343,6 +343,7 @@ def train(model_name,
           # Logging
           checkpoint_path='',
           n_step_per_checkpoint=1000,
+          checkpoint_every_epoch=False,
           n_step_per_summary=100,
           log_path=None,
           # UnOS-specific
@@ -413,6 +414,10 @@ def train(model_name,
     train_step = 0
     time_start = time.time()
 
+    # Running average for loss logging
+    running_loss_sum = 0.0
+    running_loss_count = 0
+
     if use_iterations:
         log('Starting stereo AugUndo training for model: {} ({} iterations)'.format(
             model_name, num_iterations), log_path)
@@ -422,6 +427,7 @@ def train(model_name,
     log('Augmentation probability: {}'.format(augmentation_probability), log_path)
 
     def _run_one_step(batch_data, train_step, epoch):
+        nonlocal running_loss_sum, running_loss_count
         """Run a single training step. Returns (loss, loss_info)."""
 
         if model_name == 'bdf':
@@ -492,13 +498,18 @@ def train(model_name,
         loss.backward()
         optimizer.step()
 
+        # Accumulate running average
+        loss_val = loss.item()
+        running_loss_sum += loss_val
+        running_loss_count += 1
+
         # Logging
         if train_step % n_step_per_summary == 0:
-            loss_val = loss.item()
+            avg_loss = running_loss_sum / running_loss_count
             time_elapsed = (time.time() - time_start) / 3600
 
-            log_msg = 'Step={:6d}  Epoch={:3d}  Loss={:.5f}  Time={:.2f}h'.format(
-                train_step, epoch, loss_val, time_elapsed)
+            log_msg = 'Step={:6d}  Epoch={:3d}  AvgLoss={:.5f}  Loss={:.5f}  Time={:.2f}h'.format(
+                train_step, epoch, avg_loss, loss_val, time_elapsed)
 
             if isinstance(loss_info, dict):
                 for key, val in loss_info.items():
@@ -506,12 +517,18 @@ def train(model_name,
                         summary_writer.add_scalar('train/{}'.format(key), val, train_step)
 
             summary_writer.add_scalar('train/total_loss', loss_val, train_step)
+            summary_writer.add_scalar('train/avg_loss', avg_loss, train_step)
             summary_writer.add_scalar('train/learning_rate', current_lr, train_step)
+
+            # Reset running average after logging
+            running_loss_sum = 0.0
+            running_loss_count = 0
 
             log(log_msg, log_path)
 
-        # Checkpointing
-        if train_step % n_step_per_checkpoint == 0:
+        # Step-based checkpointing (used in iteration mode and epoch mode when
+        # checkpoint_every_epoch is False)
+        if not checkpoint_every_epoch and train_step % n_step_per_checkpoint == 0:
             ckpt_dir = checkpoint_path + 'step-{:06d}'.format(train_step)
             os.makedirs(ckpt_dir, exist_ok=True)
             ckpt_file = os.path.join(ckpt_dir, '{}_model.pth'.format(model_name))
@@ -519,6 +536,14 @@ def train(model_name,
             log('Checkpoint saved: {}'.format(ckpt_file), log_path)
 
         return loss, loss_info
+
+    def _save_epoch_checkpoint(epoch, train_step):
+        """Save a checkpoint at the end of an epoch."""
+        ckpt_dir = checkpoint_path + 'epoch-{:03d}'.format(epoch)
+        os.makedirs(ckpt_dir, exist_ok=True)
+        ckpt_file = os.path.join(ckpt_dir, '{}_model.pth'.format(model_name))
+        model_wrapper.save_model(ckpt_file, train_step, optimizer)
+        log('Checkpoint saved: {}'.format(ckpt_file), log_path)
 
     if use_iterations:
         # Iteration-based training: loop over dataloader, restarting when exhausted
@@ -551,6 +576,10 @@ def train(model_name,
             for batch_idx, batch_data in enumerate(dataloader):
                 train_step += 1
                 _run_one_step(batch_data, train_step, epoch)
+
+            # Per-epoch checkpoint
+            if checkpoint_every_epoch:
+                _save_epoch_checkpoint(epoch, train_step)
 
     # Final checkpoint
     ckpt_dir = checkpoint_path + 'final'

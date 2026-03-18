@@ -50,7 +50,7 @@ python -u -m stereo_depth_completion.train_stereo_depth_completion \
     --augmentation_random_brightness 0.8 1.2 \
     --augmentation_random_contrast 0.8 1.2 \
     --augmentation_random_saturation 0.8 1.2 \
-    --n_step_per_checkpoint 1000 \
+    --checkpoint_every_epoch \
     --n_step_per_summary 100 \
     --n_thread 4
 

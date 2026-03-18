@@ -128,7 +128,9 @@ def get_args():
     parser.add_argument('--checkpoint_path', type=str, required=True,
                         help='path for saving checkpoints')
     parser.add_argument('--n_step_per_checkpoint', type=int, default=1000,
-                        help='steps between checkpoints')
+                        help='steps between checkpoints (ignored if --checkpoint_every_epoch is set)')
+    parser.add_argument('--checkpoint_every_epoch', action='store_true', default=False,
+                        help='save checkpoint at end of each epoch instead of every N steps')
     parser.add_argument('--n_step_per_summary', type=int, default=100,
                         help='steps between log summaries')
 
@@ -262,6 +264,7 @@ def main():
         num_iterations=num_iterations,
         checkpoint_path=args.checkpoint_path,
         n_step_per_checkpoint=args.n_step_per_checkpoint,
+        checkpoint_every_epoch=args.checkpoint_every_epoch,
         n_step_per_summary=args.n_step_per_summary,
         device=device,
         n_thread=args.n_thread)
