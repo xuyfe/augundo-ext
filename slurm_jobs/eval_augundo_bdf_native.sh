@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=eval_augundo_bdf
+#SBATCH --job-name=eval_augundo_bdf_native
 #SBATCH --time=1-00:00:00
 #SBATCH --mail-type=ALL
 #SBATCH --cpus-per-task=4
@@ -15,6 +15,7 @@ module load cuDNN
 source augundo-ext/augundo-py310env/bin/activate
 
 SENIOR_THESIS="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
+BDF_SRC="$SENIOR_THESIS/augundo-ext/external_src/stereo_depth_completion/BDF"
 
 CHECKPOINT_DIR="$SENIOR_THESIS/augundo-ext/checkpoints/augundo_bdf"
 RESULTS_DIR="$SENIOR_THESIS/augundo-ext/results/augundo_bdf"
@@ -37,13 +38,22 @@ echo "CWD:            $(pwd)"
 # Run from augundo-ext so imports resolve
 cd "$SENIOR_THESIS/augundo-ext" || exit 1
 
-python -u -m stereo_depth_completion.run_stereo_depth_completion \
-    --model bdf \
-    --restore_path "$CHECKPOINT_FILE" \
-    --gt_path "$SENIOR_THESIS/augundo-ext/data/scene_flow_2015" \
-    --output_path "$RESULTS_DIR" \
-    --bdf_model_name monodepth \
+# Step 1: Run inference on 200 KITTI 2015 stereo pairs using BDF's test_stereo.py
+python -u -m external_src.stereo_depth_completion.BDF.test_stereo \
+    --data_path "$SENIOR_THESIS/augundo-ext/data/scene_flow_2015" \
+    --filenames_file "$BDF_SRC/utils/filenames/kitti_stereo_2015_test_files_image_01.txt" \
+    --checkpoint_path "$CHECKPOINT_FILE" \
+    --model_name monodepth \
     --input_height 256 \
     --input_width 512
+
+# Move disparities to results dir
+mv ./disparities.npy "$RESULTS_DIR/disparities.npy"
+
+# Step 2: Evaluate against GT
+python -u -m external_src.stereo_depth_completion.BDF.utils.evaluate_kitti \
+    --split kitti \
+    --predicted_disp_path "$RESULTS_DIR/disparities.npy" \
+    --gt_path "$SENIOR_THESIS/augundo-ext/data/scene_flow_2015"
 
 echo "Evaluation completed"

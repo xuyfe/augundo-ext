@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=eval_augundo_unos
+#SBATCH --job-name=eval_augundo_unos_native
 #SBATCH --time=1-00:00:00
 #SBATCH --mail-type=ALL
 #SBATCH --cpus-per-task=4
@@ -15,6 +15,7 @@ module load cuDNN
 source augundo-ext/augundo-py310env/bin/activate
 
 SENIOR_THESIS="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
+UNOS_SRC="$SENIOR_THESIS/augundo-ext/external_src/stereo_depth_completion/UnOS"
 
 CHECKPOINT_DIR="$SENIOR_THESIS/augundo-ext/checkpoints/augundo_unos"
 
@@ -34,14 +35,21 @@ echo "CWD:            $(pwd)"
 # Run from augundo-ext so imports resolve
 cd "$SENIOR_THESIS/augundo-ext" || exit 1
 
-python -u -m stereo_depth_completion.run_stereo_depth_completion \
-    --model unos \
-    --restore_path "$CHECKPOINT_FILE" \
-    --gt_2015_path "$SENIOR_THESIS/augundo-ext/data/scene_flow_2015/training" \
-    --gt_2012_path "$SENIOR_THESIS/augundo-ext/data/stereo_2012/training" \
-    --unos_mode stereo \
-    --input_height 256 \
-    --input_width 832 \
+# Use the original UnOS eval pipeline (main.py --train_test test)
+# Loads 200 images from scene_flow_2015 + 194 from stereo_2012,
+# runs inference, and prints depth/disparity metrics
+python -u -m external_src.stereo_depth_completion.UnOS.main \
+    --data_dir "$SENIOR_THESIS/augundo-ext/data/kitti_raw_data" \
+    --train_file "$UNOS_SRC/filenames/kitti_train_files_png_4frames.txt" \
+    --gt_2012_dir "$SENIOR_THESIS/augundo-ext/data/stereo_2012/training" \
+    --gt_2015_dir "$SENIOR_THESIS/augundo-ext/data/scene_flow_2015/training" \
+    --trace "$CHECKPOINT_DIR" \
+    --mode stereo \
+    --train_test test \
+    --pretrained_model "$CHECKPOINT_FILE" \
+    --batch_size 4 \
+    --img_height 256 \
+    --img_width 832 \
     --num_scales 4
 
 echo "Evaluation completed"
