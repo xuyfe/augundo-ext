@@ -12,6 +12,7 @@ Usage:
 
 import os
 import sys
+import importlib.util
 import argparse
 import numpy as np
 import torch
@@ -212,11 +213,17 @@ def main():
     if args.gt_path:
         print('\nEvaluating against ground truth...')
 
-        _bdf_root = os.path.join(_project_root, 'external_src', 'stereo_depth_completion', 'BDF')
-        if _bdf_root not in sys.path:
-            sys.path.insert(0, _bdf_root)
+        # Load BDF evaluation_utils via importlib to avoid utils name collision
+        _bdf_eval_path = os.path.join(
+            _project_root, 'external_src', 'stereo_depth_completion', 'BDF',
+            'utils', 'evaluation_utils.py')
+        _eval_spec = importlib.util.spec_from_file_location('_bdf_eval_utils', _bdf_eval_path)
+        _eval_utils = importlib.util.module_from_spec(_eval_spec)
+        _eval_spec.loader.exec_module(_eval_utils)
 
-        from utils.evaluation_utils import compute_errors
+        compute_errors = _eval_utils.compute_errors
+        load_gt_disp_kitti = _eval_utils.load_gt_disp_kitti
+        convert_disps_to_depths_kitti = _eval_utils.convert_disps_to_depths_kitti
 
         # Load predicted disparities
         pred_files = sorted([
@@ -227,9 +234,6 @@ def main():
         if pred_disps:
             pred_disps_arr = np.array(pred_disps)
             print('Loaded {} predicted disparity maps'.format(len(pred_disps)))
-
-            # Use BDF evaluation utilities for KITTI evaluation
-            from utils.evaluation_utils import load_gt_disp_kitti, convert_disps_to_depths_kitti
 
             gt_disps = load_gt_disp_kitti(args.gt_path)
             gt_depths, pred_depths, _ = convert_disps_to_depths_kitti(gt_disps, pred_disps_arr)
