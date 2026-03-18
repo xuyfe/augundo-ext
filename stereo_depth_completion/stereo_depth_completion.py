@@ -303,7 +303,7 @@ def create_unos_dataloader(data_dir, train_file, img_height, img_width,
     opt.img_width = img_width
     opt.num_scales = num_scales
 
-    dataset = MonodepthDataloader(opt)
+    dataset = MonodepthDataloader(opt, training=False)
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,
