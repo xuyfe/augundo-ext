@@ -48,8 +48,10 @@ def get_args():
     # Training
     parser.add_argument('--batch_size', type=int, default=2,
                         help='batch size')
-    parser.add_argument('--num_epochs', type=int, default=80,
-                        help='number of training epochs')
+    parser.add_argument('--num_epochs', type=int, default=None,
+                        help='number of training epochs (use --num_epochs or --num_iterations, not both)')
+    parser.add_argument('--num_iterations', type=int, default=None,
+                        help='number of training iterations (use --num_epochs or --num_iterations, not both)')
     parser.add_argument('--learning_rate', type=float, default=1e-4,
                         help='initial learning rate')
     parser.add_argument('--learning_rates', type=float, nargs='+', default=None,
@@ -227,6 +229,16 @@ def main():
     hue = args.augmentation_random_hue if 'color_jitter' in args.augmentation_types else [-1, -1]
     saturation = args.augmentation_random_saturation if 'color_jitter' in args.augmentation_types else [-1, -1]
 
+    # Resolve training duration: either num_iterations or num_epochs
+    num_epochs = args.num_epochs
+    num_iterations = args.num_iterations
+    if num_epochs is None and num_iterations is None:
+        # Default: epochs for BDF, iterations for UnOS (matching original scripts)
+        if args.model == 'bdf':
+            num_epochs = 80
+        else:
+            num_iterations = 100000
+
     # Train
     train(
         model_name=args.model,
@@ -246,7 +258,8 @@ def main():
         learning_rate=args.learning_rate,
         learning_rates=args.learning_rates,
         learning_schedule=args.learning_schedule,
-        num_epochs=args.num_epochs,
+        num_epochs=num_epochs,
+        num_iterations=num_iterations,
         checkpoint_path=args.checkpoint_path,
         n_step_per_checkpoint=args.n_step_per_checkpoint,
         n_step_per_summary=args.n_step_per_summary,
