@@ -4,14 +4,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# Add UnOS source to path
-_unos_root = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    'external_src', 'stereo_depth_completion', 'UnOS')
-if _unos_root not in sys.path:
-    sys.path.insert(0, _unos_root)
+# Ensure project root (augundo-ext) is on path so we can import UnOS by full package path.
+# Do not use "from models import ..." here: stereo_depth_completion_model imports BDF first,
+# which caches "models" as BDF's package; we need UnOS's Model_stereo and Model_depthflow.
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
 
-from models import Model_depthflow, Model_stereo
+from external_src.stereo_depth_completion.UnOS.models import Model_stereo, Model_depthflow
 
 
 class UnOSModel(object):

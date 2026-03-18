@@ -23,10 +23,11 @@ mkdir -p "$CHECKPOINT_DIR"
 
 echo "Data dir:       $DATA_PATH"
 echo "Checkpoint dir: $CHECKPOINT_DIR"
-echo "CWD:            $(pwd)"
 
 # Run from augundo-ext so imports resolve
 cd "$SENIOR_THESIS/augundo-ext" || exit 1
+
+echo "CWD:            $(pwd)"
 
 python -u -m stereo_depth_completion.train_stereo_depth_completion \
     --model unos \
