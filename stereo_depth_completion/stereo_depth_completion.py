@@ -115,8 +115,9 @@ def apply_stereo_geometric_augmentation(transforms_geometric,
     padding_modes = [padding_mode] * 4
 
     # Apply the same geometric transform to all 4 images jointly
+    # When no intrinsics_arr is passed, transform() returns (images_arr, transform_performed)
     [aug_left_t, aug_right_t, aug_left_t1, aug_right_t1], \
-        _, transform_performed = transforms_geometric.transform(
+        transform_performed = transforms_geometric.transform(
             images_arr=[image_left_t, image_right_t, image_left_t1, image_right_t1],
             padding_modes=padding_modes,
             random_transform_probability=augmentation_probability)
