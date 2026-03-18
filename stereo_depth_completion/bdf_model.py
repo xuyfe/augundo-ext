@@ -1,10 +1,11 @@
+import importlib.util
 import os
 import sys
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# Add BDF source to path
+# Add BDF source to path for models.* imports (MonodepthModel, PWC_net, etc.)
 _bdf_root = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     'external_src', 'stereo_depth_completion', 'BDF')
@@ -13,8 +14,20 @@ if _bdf_root not in sys.path:
 
 from models.MonodepthModel import MonodepthNet
 from models.PWC_net import pwc_dc_net
-from utils.utils import SSIM, cal_grad2_error, make_pyramid, get_mask, create_border_mask
 from models.networks.resample2d_package import Resample2d
+
+# Import BDF's utils.utils via importlib to avoid name collision with the
+# project-level utils/ directory (augundo-ext/utils/) which may also be on
+# sys.path.
+_bdf_utils_spec = importlib.util.spec_from_file_location(
+    '_bdf_utils', os.path.join(_bdf_root, 'utils', 'utils.py'))
+_bdf_utils = importlib.util.module_from_spec(_bdf_utils_spec)
+_bdf_utils_spec.loader.exec_module(_bdf_utils)
+SSIM = _bdf_utils.SSIM
+cal_grad2_error = _bdf_utils.cal_grad2_error
+make_pyramid = _bdf_utils.make_pyramid
+get_mask = _bdf_utils.get_mask
+create_border_mask = _bdf_utils.create_border_mask
 
 
 class BDFModel(object):
@@ -245,7 +258,7 @@ class BDFModel(object):
         }
 
         # Optional 2-warp losses
-        from utils.utils import warp_2
+        warp_2 = _bdf_utils.warp_2
 
         class _Args:
             alpha_image_loss = self.alpha_image_loss

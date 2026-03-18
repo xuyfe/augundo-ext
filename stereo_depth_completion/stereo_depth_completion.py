@@ -14,6 +14,7 @@ Key differences from monocular:
 - No pose network for BDF; UnOS handles ego-motion internally
 '''
 
+import importlib.util
 import os
 import sys
 import time
@@ -22,13 +23,34 @@ import torch
 import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 
-# Add project root to path for utils
-_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _project_root not in sys.path:
-    sys.path.insert(0, _project_root)
 
-from utils.src.transforms import Transforms
-from utils.src.log_utils import log
+def _import_from_file(module_name, file_path):
+    """Import a module directly from its file path, bypassing sys.path resolution.
+
+    This avoids name collisions when multiple directories on sys.path contain
+    a ``utils`` sub-directory (e.g. augundo-ext/utils/ vs BDF/utils/).
+    """
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+# Repo root: parent of this package (contains external_src/, utils/, stereo_depth_completion/)
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Import utils.src modules directly by file path to avoid name collision with
+# external_src/.../BDF/utils/ which may already be cached in sys.modules when
+# bdf_model.py is imported before this module.
+_transforms_mod = _import_from_file(
+    '_augundo_transforms',
+    os.path.join(_project_root, 'utils', 'src', 'transforms.py'))
+Transforms = _transforms_mod.Transforms
+
+_log_utils_mod = _import_from_file(
+    '_augundo_log_utils',
+    os.path.join(_project_root, 'utils', 'src', 'log_utils.py'))
+log = _log_utils_mod.log
 
 
 # ---------------------------------------------------------------------------
