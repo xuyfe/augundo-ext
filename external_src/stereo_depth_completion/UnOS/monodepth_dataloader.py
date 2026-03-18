@@ -69,13 +69,14 @@ class MonodepthDataloader(Dataset):
     plus multi-scale camera intrinsics.
     """
 
-    def __init__(self, opt):
+    def __init__(self, opt, training=True):
         super().__init__()
         self.data_path = opt.data_dir
         self.opt = opt
         self.img_height = opt.img_height
         self.img_width = opt.img_width
         self.num_scales = opt.num_scales
+        self.training = training
 
         # Read file list
         with open(opt.train_file, 'r') as f:
@@ -158,13 +159,13 @@ class MonodepthDataloader(Dataset):
                                          float(orig_h), float(orig_w))
 
         # Random left-right flip (swap left <-> right)
-        if random.random() > 0.5:
+        if self.training and random.random() > 0.5:
             left, right = np.fliplr(right).copy(), np.fliplr(left).copy()
             next_left, next_right = (np.fliplr(next_right).copy(),
                                      np.fliplr(next_left).copy())
 
         # Random front-back swap (swap current <-> next)
-        if random.random() > 0.5:
+        if self.training and random.random() > 0.5:
             left, next_left = next_left, left
             right, next_right = next_right, right
 
