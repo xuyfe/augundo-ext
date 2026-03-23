@@ -91,16 +91,20 @@ L_total = w_color * L_color
 
 ---
 
-## 3. Stereo AugUndo Loss: BDF
+## 3. Stereo AugUndo Loss (Unified for BDF and UnOS)
 
 **Files:**
-- Training loop: `stereo_depth_completion/stereo_depth_completion.py` (lines 429-494)
-- Model + loss: `stereo_depth_completion/bdf_model.py` (lines 86-300)
+- Training loop: `stereo_depth_completion/stereo_depth_completion.py`
+- Stereo loss: `stereo_depth_completion/stereo_losses.py`
+- BDF model wrapper: `stereo_depth_completion/bdf_model.py` (`forward_stereo_disparity`)
+- UnOS model wrapper: `stereo_depth_completion/unos_model.py` (`forward_disparity`)
 
 ### Pipeline
 
+Both BDF and UnOS follow the same AugUndo pipeline, matching the monocular pattern:
+
 ```
-Input: (left_t, right_t, left_t1, right_t1) from myCycleImageFolder(training=False)
+Input: (left_t, right_t, left_t1, right_t1) from native dataloader (augmentation disabled)
   |
   v
 [1] Photometric augmentation T_ph on all 4 images jointly (same random params)
@@ -112,144 +116,101 @@ Input: (left_t, right_t, left_t1, right_t1) from myCycleImageFolder(training=Fal
     Records: transform_performed
   |
   v
-[3] Forward pass: BDFModel.forward(aug_left_t, aug_right_t, aug_left_t1, aug_right_t1)
-    Internally builds 4 directional pairs:
-      former = [left_t1, left_t, right_t, left_t]
-      latter = [right_t1, left_t1, right_t1, right_t]
-    Runs MonodepthNet on cat(former, latter) and its reverse
-    -> Returns multi-scale disparity estimates (disp_est, disp_est_2)
+[3] Forward pass: model.forward_disparity(aug_left_t, aug_right_t)
+    -> Produces multi-scale (disp_left, disp_right) in the augmented frame
+    -> No loss computed inside the model
   |
   v
-[4] Compute loss: BDFModel.compute_loss(output, original_batch)
-    Loss uses the AUGMENTED images (former/latter from the forward output)
-    as reconstruction targets -- NOT the un-augmented originals.
+[4] Undo: T_ge^{-1} applied to disp_left and disp_right
+    - Spatial layout reversed (e.g. horizontal flip undone)
+    - Disparity values scaled by 1/s for resize augmentations
+  |
+  v
+[5] Left-right swap correction for flipped batch elements
+    - When T_ge included a horizontal flip, left and right images were swapped
+    - The model predicted "left disp" for what was originally the right view
+    - Swap disp_left and disp_right to restore original assignment
+  |
+  v
+[6] Compute stereo loss in original frame: compute_stereo_loss(left_t, right_t, disp_left, disp_right)
+    - Reconstruction targets are ORIGINAL un-augmented images
+    - Disparity predictions have been undone to original geometry
 ```
+Note: UnOS and BDF output only disparity, so depth estimation happens only during evaluation via `depth = 1 / disparity`.
 
 ### Loss Function
 
-The BDF loss (`bdf_model.py`, lines 153-300) is computed **in the augmented frame** using the augmented images that were fed to the model:
+The stereo AugUndo loss (`stereo_losses.py`) is computed **in the original frame** using undone disparity and original images:
 
 ```
-L_total = L_image + L_image_2
-        + 10 * (L_disp_gradient + L_disp_gradient_2)
-        + w_lr * L_lr
-        + [optional L_2warp]
-```
-
-| Component | Description | Weight |
-|-----------|-------------|--------|
-| `L_image` | Forward photometric reconstruction (right-to-left warp). Combines `alpha * SSIM + (1-alpha) * L1`, masked by forward-backward occlusion masks. | 1.0 |
-| `L_image_2` | Reverse photometric reconstruction (left-to-right warp). Same formulation as `L_image`. | 1.0 |
-| `L_disp_gradient` | Forward 2nd-order image-edge-aware disparity smoothness (`cal_grad2_error`). | 10.0 |
-| `L_disp_gradient_2` | Reverse 2nd-order disparity smoothness. | 10.0 |
-| `L_lr` | Left-right disparity consistency: the left disparity warped to the right view should match the right disparity, and vice versa. Applied only to stereo pair indices `[0,1,6,7]`. | 0.5 (default) |
-| `L_2warp` | Optional two-warp consistency loss (controlled by `type_of_2warp`). Chains two warps to enforce temporal-stereo consistency. Types 1, 2, 3 represent different warp orderings. | 0.1 |
-
-### Multi-Directional Architecture
-
-BDF processes **4 directional pairs** simultaneously in a single forward pass, yielding 8 disparity maps per scale (4 forward + 4 reverse):
-
-| Index | Pair | Direction |
-|-------|------|-----------|
-| 0-1 | left_t1 -> right_t1 | Stereo (time t+1) |
-| 2-3 | left_t -> left_t1 | Temporal (left) |
-| 4-5 | right_t -> right_t1 | Temporal (right) |
-| 6-7 | left_t -> right_t | Stereo (time t) |
-
-The forward-backward occlusion masks (`get_mask`) are computed from forward and reverse disparity to handle occluded regions. Stereo pairs (indices 0,1,6,7) use unmasked loss (mask set to 1) since stereo occlusions are handled by LR consistency.
-
-### Key Difference from Monocular
-
-**No undo step and no pose network.** BDF's loss operates entirely in the augmented frame. The `compute_loss` method receives the augmented `former`/`latter` images from `forward()` and computes photometric reconstruction by warping between these augmented views. Since the loss is self-contained within the augmented frame (warp right to reconstruct left, and vice versa), geometric augmentation affects all views equally and the loss remains valid without needing to undo.
-
-The `batch` dict containing original images is passed to `compute_loss` but is only used for determining batch dimensions (indexing occlusion masks), not for reconstruction targets.
-
----
-
-## 4. Stereo AugUndo Loss: UnOS
-
-**Files:**
-- Training loop: `stereo_depth_completion/stereo_depth_completion.py` (lines 465-492)
-- Model wrapper: `stereo_depth_completion/unos_model.py`
-- Core model: `external_src/stereo_depth_completion/UnOS/models.py` (`Model_stereo`, lines 63-96)
-- Loss computation: `external_src/stereo_depth_completion/UnOS/monodepth_model.py` (`MonodepthModel.build_losses`, lines 274-366)
-
-### Pipeline
-
-```
-Input: (left_t, right_t, left_t1, right_t1, cam2pix, pix2cam)
-       from MonodepthDataloader(training=False)
-  |
-  v
-[1] Photometric augmentation T_ph on all 4 images jointly
-  |
-  v
-[2] Stereo-safe geometric augmentation T_ge on all 4 images jointly
-    (same constraints as BDF: only horizontal flip + left<->right swap)
-    Records: transform_performed
-  |
-  v
-[3] Forward pass: UnOSModel.forward(aug_left_t, aug_right_t, ..., cam2pix, pix2cam)
-    -> Model_stereo computes disparity AND loss internally
-    -> Returns (loss, loss_info)
-  |
-  v
-[4] Backpropagate loss directly (no undo step)
-```
-
-### Loss Function
-
-The UnOS stereo loss is computed inside `MonodepthModel.build_losses` (lines 274-366). It operates **in the augmented frame**, using the augmented stereo pair that was fed to the model:
-
-```
-L_total = L_image
-        + w_smooth * L_disp_gradient
+L_total = L_rec
+        + w_smooth * L_smooth
         + w_lr * L_lr
 ```
 
-| Component | Description | Weight |
-|-----------|-------------|--------|
-| `L_image` | Bidirectional photometric reconstruction. Warps right image to left (and vice versa) using predicted disparity, then computes `alpha * SSIM + (1-alpha) * L1`. Masked by forward-warped occlusion masks with normalization. Summed over 4 scales. | 1.0 |
-| `L_disp_gradient` | 2nd-order image-edge-aware disparity smoothness. Applied to both left and right disparities across 4 scales (8 terms each). Averaged and scaled by `1/(2^s)` per scale. | `depth_smooth_weight` (default: 10.0) |
-| `L_lr` | Left-right disparity consistency. The right disparity warped to the left view should equal the left disparity, and vice versa. Masked by occlusion masks. Summed over 4 scales. | `lr_loss_weight` (fixed: 1.0) |
+| Component | Description | Default Weight |
+|-----------|-------------|----------------|
+| `L_rec` | Bidirectional photometric reconstruction. Warps original right image to left (and vice versa) using undone disparity, then computes `alpha * SSIM + (1-alpha) * L1`. Summed over 4 scales. | 1.0 (alpha=0.85) |
+| `L_smooth` | 2nd-order image-edge-aware disparity smoothness. Weights disparity curvature by `exp(-10 * \|image_gradient\|)`. Applied to both left and right disparity across 4 scales, scaled by `1/(2^s)`. | 10.0 |
+| `L_lr` | Left-right disparity consistency. Warps right disparity to the left view (using left disparity) and checks that it equals left disparity, and vice versa. Summed over 4 scales. | 1.0 |
 
-### Model Architecture Detail
+### Model-Specific Forward Methods
 
-`Model_stereo` calls `disp_godard()` which:
-1. Creates a temporary `MonodepthModel` instance (sharing the `pwc_disp` network)
-2. Runs `build_outputs()`: PWCDisp forward pass producing 4-scale disparity maps, warped images, occlusion masks, LR consistency maps, and smoothness terms
-3. Runs `build_losses()`: computes the total loss from those outputs
+**BDF** (`forward_stereo_disparity`):
+- Runs only the stereo pair `(left, right)` through MonodepthNet (not the full 4-directional-pair batch used in the original BDF training)
+- Runs the network in both directions: `cat(left, right)` and `cat(right, left)`
+- Extracts horizontal flow component (ch0) as stereo disparity
+- Negates forward ch0 to produce positive left disparity; reverse ch0 is already positive right disparity
 
-The `PWCDispDecoder` outputs **normalized disparity** (fraction of image width). The normalization happens at the decoder level: `flow[:, 0:1, :, :] / (W / 4.0)`. This normalized disparity is converted to pixel-space flow for warping via `generate_flow_left`: `flow_x = -disp * W`.
+**UnOS** (`forward_disparity`):
+- Calls `feature_pyramid_disp` and `pwc_disp` (shared with `Model_stereo`) via `disp_godard(is_training=False)`
+- Skips internal loss computation but preserves gradient flow through shared weights
+- Splits the 2-channel output (ch0 = left disp, ch1 = right disp)
 
-### Key Difference from Monocular
+### Warping Implementation
 
-Like BDF, **no undo step.** The loss is computed entirely within `Model_stereo.forward()` in the augmented frame. The stereo pair provides its own reconstruction signal (warp right to left and vice versa) without needing a pose network or camera intrinsics for the loss. Camera intrinsics (`cam2pix`, `pix2cam`) are passed through the wrapper but are **not used** by `Model_stereo` in stereo mode -- they would only be needed for optical flow / ego-motion estimation in `Model_depthflow`.
+The stereo loss uses `F.grid_sample`-based backward warping (`stereo_losses.py`), independent of the model-specific warping used by BDF (`Resample2d`) and UnOS (`transformer_old`). For left reconstruction from right:
+
+```
+grid_x_warped = grid_x - disp_left * 2W/(W-1)
+left_est = F.grid_sample(right, grid, align_corners=True)
+```
+
+### Key Differences from Model-Native Losses
+
+| Aspect | Native BDF/UnOS Loss | Stereo AugUndo Loss |
+|--------|---------------------|---------------------|
+| **Frame** | Augmented | Original (un-augmented) |
+| **Undo step** | None | T_ge^{-1} on disparity + left-right swap |
+| **Reconstruction targets** | Augmented images | Original images |
+| **Occlusion masking** | Forward-backward or forward-warp masks | None (clean stereo loss) |
+| **Batch structure (BDF)** | 4 directional pairs (stereo + temporal) | Single stereo pair only |
+| **Warping** | Model-specific (Resample2d, transformer_old) | Unified F.grid_sample |
 
 ---
 
-## 5. Summary of Differences
+## 4. Summary of Differences
 
 ### Monocular (VOICED) vs. Stereo (BDF/UnOS) AugUndo
 
-| Aspect | Monocular (VOICED) | Stereo (BDF) | Stereo (UnOS) |
-|--------|-------------------|--------------|---------------|
-| **Undo step** | Yes -- `T_ge^{-1}` applied to predictions before loss | No | No |
-| **Loss frame** | Original (un-augmented) frame | Augmented frame | Augmented frame |
-| **Pose network** | Yes (separate PoseNet) | No | No |
-| **Reconstruction signal** | Temporal reprojection (t-1, t+1 -> t) using depth + pose | Stereo warping (right <-> left) using disparity | Stereo warping (right <-> left) using disparity |
-| **Sparse depth** | Yes (LiDAR supervision) | No | No |
-| **Multi-directional** | Single reference view (image0) | 4 directional pairs (stereo + temporal, both directions) | Single stereo pair |
-| **Number of scales** | 1 (full resolution) | 4 (multi-scale pyramid) | 4 (multi-scale pyramid) |
-| **Occlusion handling** | Validity maps from sparse depth | Forward-backward consistency masks | Forward-warped occlusion masks |
-| **Smoothness** | 1st-order edge-aware | 2nd-order edge-aware | 2nd-order edge-aware |
-| **Intrinsics used in loss** | Yes (for 3D reprojection) | No | No |
+| Aspect | Monocular (VOICED) | Stereo AugUndo |
+|--------|-------------------|----------------|
+| **Undo step** | Yes -- `T_ge^{-1}` applied to depth predictions | Yes -- `T_ge^{-1}` applied to disparity + left-right swap |
+| **Loss frame** | Original (un-augmented) frame | Original (un-augmented) frame |
+| **Pose network** | Yes (separate PoseNet) | No |
+| **Reconstruction signal** | Temporal reprojection (t-1, t+1 -> t) using depth + pose | Stereo warping (right <-> left) using disparity |
+| **Sparse depth** | Yes (LiDAR supervision) | No |
+| **Number of scales** | 1 (full resolution) | 4 (multi-scale pyramid) |
+| **Smoothness** | 1st-order edge-aware | 2nd-order edge-aware |
+| **Intrinsics used in loss** | Yes (for 3D reprojection) | No |
 
-### Why No Undo Step in Stereo?
+### Stereo-Specific Augmentation Handling
 
-In the monocular pipeline, the loss requires computing reprojection from temporal neighbors (image1, image2) onto the reference frame (image0). These neighboring images are **not geometrically augmented** in the same way as the reference -- only the reference image and its sparse depth pass through `T_ge`. Therefore, the predicted depth must be undone (`T_ge^{-1}`) before it can be used for reprojection against the original neighbors.
+When horizontal flip is applied in the stereo pipeline, two additional steps are required that have no analog in the monocular case:
 
-In the stereo pipeline, **all images are augmented identically** with the same geometric transform (including left-right swap for horizontal flip). The loss is computed by warping between images that share the same augmented coordinate frame. Since the disparity is predicted and evaluated within this shared frame, no undo is needed -- the stereo reconstruction loss is inherently equivariant to the joint augmentation.
+1. **Left-right image swap during augmentation**: `apply_stereo_geometric_augmentation` swaps the left and right images when a horizontal flip is applied, because flipping reverses the stereo baseline direction.
+
+2. **Left-right disparity swap during undo**: After applying `T_ge^{-1}` to the predicted disparity, the left and right disparity assignments must be swapped back for flipped elements. This is because the model predicted "left disparity" for what was originally the right view (and vice versa) due to the image swap in step 1.
 
 ### Augmentation Constraints
 
