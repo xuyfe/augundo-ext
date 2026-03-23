@@ -101,11 +101,13 @@ def get_args():
                         help='BDF left-right consistency loss weight')
     parser.add_argument('--alpha_image_loss', type=float, default=0.85,
                         help='BDF weight between SSIM and L1 in image loss')
-    parser.add_argument('--disp_gradient_loss_weight', type=float, default=0.1,
-                        help='BDF disparity smoothness weight')
+    parser.add_argument('--disp_gradient_loss_weight', type=float, default=10.0,
+                        help='BDF disparity smoothness weight (native BDF uses 10.0)')
     parser.add_argument('--type_of_2warp', type=int, default=0,
                         choices=[0, 1, 2, 3],
                         help='BDF two-warp loss type')
+    parser.add_argument('--temporal_loss_weight', type=float, default=0.1,
+                        help='BDF temporal photometric loss weight (0 to disable)')
 
     # UnOS-specific hyperparameters
     parser.add_argument('--unos_mode', type=str, default='depthflow',
@@ -241,6 +243,19 @@ def main():
         else:
             num_iterations = 100000
 
+    # Resolve loss weights per model
+    if args.model == 'bdf':
+        loss_alpha = args.alpha_image_loss
+        loss_smooth = args.disp_gradient_loss_weight
+        loss_lr = args.lr_loss_weight
+        loss_temporal = args.temporal_loss_weight
+    else:
+        # UnOS: map from UnOS-specific arg names
+        loss_alpha = args.ssim_weight
+        loss_smooth = args.depth_smooth_weight
+        loss_lr = 1.0           # UnOS native default
+        loss_temporal = 0.0     # No temporal for UnOS (handled internally)
+
     # Train
     train(
         model_name=args.model,
@@ -257,6 +272,10 @@ def main():
         augmentation_random_hue=hue,
         augmentation_random_saturation=saturation,
         augmentation_padding_mode=args.augmentation_padding_mode,
+        alpha_image_loss=loss_alpha,
+        disp_smooth_weight=loss_smooth,
+        lr_loss_weight=loss_lr,
+        temporal_loss_weight=loss_temporal,
         learning_rate=args.learning_rate,
         learning_rates=args.learning_rates,
         learning_schedule=args.learning_schedule,

@@ -52,7 +52,8 @@ _log_utils_mod = _import_from_file(
     os.path.join(_project_root, 'utils', 'src', 'log_utils.py'))
 log = _log_utils_mod.log
 
-from stereo_depth_completion.stereo_losses import compute_stereo_loss
+from stereo_depth_completion.stereo_losses import (
+    compute_stereo_loss, compute_temporal_photometric_loss)
 
 
 # ---------------------------------------------------------------------------
@@ -363,6 +364,11 @@ def train(model_name,
           augmentation_random_hue=None,
           augmentation_random_saturation=None,
           augmentation_padding_mode='edge',
+          # Loss weights
+          alpha_image_loss=0.85,
+          disp_smooth_weight=10.0,
+          lr_loss_weight=1.0,
+          temporal_loss_weight=0.1,
           # Training config
           learning_rate=1e-4,
           learning_rates=None,
@@ -466,7 +472,8 @@ def train(model_name,
             4. Undo geometric augmentation on disparity predictions
             5. Swap left/right disparity for horizontally flipped batch elements
             6. Compute stereo reconstruction loss in the original frame
-            7. Backpropagate
+            7. (BDF only) Compute temporal photometric loss
+            8. Backpropagate
         """
 
         # ---- 1. Load batch ----
@@ -515,22 +522,66 @@ def train(model_name,
         # swaps left and right images.  The model therefore predicts left disp
         # for what was originally the right view and vice versa.  Undo the swap
         # so disparity channels match the original left/right assignment.
-        if 'random_flip_type' in transform_performed:
-            do_flip = transform_performed['random_flip_type']
-            if do_flip is not None and (not hasattr(do_flip, '__len__') or len(do_flip) > 0):
-                n_batch = left_t.shape[0]
-                for n in range(n_batch):
-                    flipped = _check_flipped(do_flip, n)
-                    if flipped:
-                        for s in range(len(disp_left)):
-                            disp_left[s][n], disp_right[s][n] = \
-                                disp_right[s][n].clone(), disp_left[s][n].clone()
+        do_flip = transform_performed.get('random_flip_type')
+        has_flip = do_flip is not None and (
+            not hasattr(do_flip, '__len__') or len(do_flip) > 0)
 
-        # ---- 6. Compute loss in the original frame ----
+        if has_flip:
+            n_batch = left_t.shape[0]
+            for n in range(n_batch):
+                flipped = _check_flipped(do_flip, n)
+                if flipped:
+                    for s in range(len(disp_left)):
+                        disp_left[s][n], disp_right[s][n] = \
+                            disp_right[s][n].clone(), disp_left[s][n].clone()
+
+        # ---- 6. Compute stereo loss in the original frame ----
         loss, loss_info = compute_stereo_loss(
-            left_t, right_t, disp_left, disp_right)
+            left_t, right_t, disp_left, disp_right,
+            alpha_image_loss=alpha_image_loss,
+            disp_smooth_weight=disp_smooth_weight,
+            lr_loss_weight=lr_loss_weight)
 
-        # Backpropagation
+        # ---- 7. (BDF only) Temporal photometric loss ----
+        if model_name == 'bdf' and temporal_loss_weight > 0:
+            # Predict temporal flow in augmented frame
+            flow_left_aug = model_wrapper.forward_temporal_flow(
+                aug_left_t, aug_left_t1)
+            flow_right_aug = model_wrapper.forward_temporal_flow(
+                aug_right_t, aug_right_t1)
+
+            # Undo geometric augmentation on temporal flow
+            flow_left = undo_stereo_geometric_augmentation(
+                flow_left_aug, transform_performed,
+                padding_mode=augmentation_padding_mode)
+            flow_right = undo_stereo_geometric_augmentation(
+                flow_right_aug, transform_performed,
+                padding_mode=augmentation_padding_mode)
+
+            # For flipped elements: swap left/right temporal flows and
+            # negate horizontal flow component (direction reversal from flip)
+            if has_flip:
+                for n in range(n_batch):
+                    if _check_flipped(do_flip, n):
+                        for s in range(len(flow_left)):
+                            flow_left[s][n], flow_right[s][n] = \
+                                flow_right[s][n].clone(), flow_left[s][n].clone()
+                            flow_left[s][n, 0:1] = -flow_left[s][n, 0:1]
+                            flow_right[s][n, 0:1] = -flow_right[s][n, 0:1]
+
+            # Temporal loss at finest scale only
+            t_loss_left = compute_temporal_photometric_loss(
+                left_t, left_t1, flow_left[0],
+                alpha_image_loss=alpha_image_loss)
+            t_loss_right = compute_temporal_photometric_loss(
+                right_t, right_t1, flow_right[0],
+                alpha_image_loss=alpha_image_loss)
+            t_loss = t_loss_left + t_loss_right
+            loss = loss + temporal_loss_weight * t_loss
+            loss_info['loss_temporal'] = t_loss.item()
+            loss_info['loss'] = loss.item()
+
+        # ---- 8. Backpropagation ----
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()

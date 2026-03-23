@@ -26,7 +26,7 @@ Disparity metrics (KITTI 2012):
 
 Evaluation completed
 
-### training bdf - old pipeline
+### training and eval bdf - old pipeline
 The following have been reloaded with a version change:
   1) CUDA/12.9.1 => CUDA/12.6.0
 
@@ -44,7 +44,7 @@ Evaluating against ground truth...
     2.3600,   122.7384,     37.609,      6.606,     95.822,      0.044,      0.088,      0.130
 Evaluation completed
 
-### training unos - old pipeline
+### training and eval unos - old pipeline
 The following have been reloaded with a version change:
   1) CUDA/12.9.1 => CUDA/12.6.0
 

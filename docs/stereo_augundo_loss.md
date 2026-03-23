@@ -146,21 +146,32 @@ The stereo AugUndo loss (`stereo_losses.py`) is computed **in the original frame
 L_total = L_rec
         + w_smooth * L_smooth
         + w_lr * L_lr
+        + w_temporal * L_temporal   (BDF only)
 ```
 
 | Component | Description | Default Weight |
 |-----------|-------------|----------------|
-| `L_rec` | Bidirectional photometric reconstruction. Warps original right image to left (and vice versa) using undone disparity, then computes `alpha * SSIM + (1-alpha) * L1`. Summed over 4 scales. | 1.0 (alpha=0.85) |
+| `L_rec` | Bidirectional photometric reconstruction with **occlusion masking**. Warps original right image to left (and vice versa) using undone disparity, then computes `alpha * SSIM + (1-alpha) * L1`. Occluded pixels (detected via forward-warped ones) are excluded and loss is normalized by visibility. Summed over 4 scales. | 1.0 (alpha=0.85) |
 | `L_smooth` | 2nd-order image-edge-aware disparity smoothness. Weights disparity curvature by `exp(-10 * \|image_gradient\|)`. Applied to both left and right disparity across 4 scales, scaled by `1/(2^s)`. | 10.0 |
-| `L_lr` | Left-right disparity consistency. Warps right disparity to the left view (using left disparity) and checks that it equals left disparity, and vice versa. Summed over 4 scales. | 1.0 |
+| `L_lr` | Left-right disparity consistency with **occlusion masking**. Warps right disparity to the left view (using left disparity) and checks that it equals left disparity, and vice versa. Occluded pixels are excluded. Summed over 4 scales. | 1.0 |
+| `L_temporal` | (BDF only) Temporal photometric reconstruction. Predicts 2D flow from `image_t` to `image_t1`, warps `image_t1` to reconstruct `image_t`, computes `alpha * SSIM + (1-alpha) * L1`. Computed at finest scale only for left and right views. | 0.1 |
+
+### Occlusion Masking
+
+Matches the forward-warp approach from UnOS (`monodepth_model.py`):
+
+1. Forward-warp a ones tensor from left to right using left disparity → `right_occ_mask`
+2. Forward-warp a ones tensor from right to left using right disparity → `left_occ_mask`
+3. Clamp masks to [0, 1]. Pixels with mask ≈ 0 are occluded (not visible from the other view).
+4. Apply masks to L1, SSIM, and LR consistency losses; normalize by `mean(mask) + 1e-12`.
+
+The forward warp uses bilinear splatting (`scatter_add_`) and is non-differentiable (masks are detached). Gradients flow through the loss terms themselves, not through the masks.
 
 ### Model-Specific Forward Methods
 
-**BDF** (`forward_stereo_disparity`):
-- Runs only the stereo pair `(left, right)` through MonodepthNet (not the full 4-directional-pair batch used in the original BDF training)
-- Runs the network in both directions: `cat(left, right)` and `cat(right, left)`
-- Extracts horizontal flow component (ch0) as stereo disparity
-- Negates forward ch0 to produce positive left disparity; reverse ch0 is already positive right disparity
+**BDF** (`forward_stereo_disparity` + `forward_temporal_flow`):
+- `forward_stereo_disparity`: Runs the stereo pair `(left, right)` and its reverse through MonodepthNet. Extracts horizontal flow component (ch0) as stereo disparity. Negates forward ch0 for positive left disparity; reverse ch0 is already positive right disparity.
+- `forward_temporal_flow`: Runs `cat(image_t, image_t1)` through the same network to predict 2D temporal flow. Returns normalized flow (ch0 = fraction of width, ch1 = fraction of height) used for temporal photometric loss.
 
 **UnOS** (`forward_disparity`):
 - Calls `feature_pyramid_disp` and `pwc_disp` (shared with `Model_stereo`) via `disp_godard(is_training=False)`
@@ -176,6 +187,13 @@ grid_x_warped = grid_x - disp_left * 2W/(W-1)
 left_est = F.grid_sample(right, grid, align_corners=True)
 ```
 
+For temporal reconstruction (BDF), `warp_with_flow_2d` uses full 2D flow:
+```
+grid_x_warped = grid_x + flow_u * 2W/(W-1)
+grid_y_warped = grid_y + flow_v * 2H/(H-1)
+image_t_est = F.grid_sample(image_t1, grid, align_corners=True)
+```
+
 ### Key Differences from Model-Native Losses
 
 | Aspect | Native BDF/UnOS Loss | Stereo AugUndo Loss |
@@ -183,8 +201,8 @@ left_est = F.grid_sample(right, grid, align_corners=True)
 | **Frame** | Augmented | Original (un-augmented) |
 | **Undo step** | None | T_ge^{-1} on disparity + left-right swap |
 | **Reconstruction targets** | Augmented images | Original images |
-| **Occlusion masking** | Forward-backward or forward-warp masks | None (clean stereo loss) |
-| **Batch structure (BDF)** | 4 directional pairs (stereo + temporal) | Single stereo pair only |
+| **Occlusion masking** | Forward-backward or forward-warp masks | Forward-warp masks (matching UnOS) |
+| **Temporal signal (BDF)** | 4 directional pairs (stereo + temporal) | Stereo pair + temporal flow loss |
 | **Warping** | Model-specific (Resample2d, transformer_old) | Unified F.grid_sample |
 
 ---
@@ -198,7 +216,7 @@ left_est = F.grid_sample(right, grid, align_corners=True)
 | **Undo step** | Yes -- `T_ge^{-1}` applied to depth predictions | Yes -- `T_ge^{-1}` applied to disparity + left-right swap |
 | **Loss frame** | Original (un-augmented) frame | Original (un-augmented) frame |
 | **Pose network** | Yes (separate PoseNet) | No |
-| **Reconstruction signal** | Temporal reprojection (t-1, t+1 -> t) using depth + pose | Stereo warping (right <-> left) using disparity |
+| **Reconstruction signal** | Temporal reprojection (t-1, t+1 -> t) using depth + pose | Stereo warping (right <-> left) using disparity + temporal flow loss (BDF) |
 | **Sparse depth** | Yes (LiDAR supervision) | No |
 | **Number of scales** | 1 (full resolution) | 4 (multi-scale pyramid) |
 | **Smoothness** | 1st-order edge-aware | 2nd-order edge-aware |

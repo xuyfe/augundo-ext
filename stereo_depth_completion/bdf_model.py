@@ -205,6 +205,41 @@ class BDFModel(object):
 
         return disp_left, disp_right
 
+    def forward_temporal_flow(self, image_t, image_t1):
+        '''
+        Predict temporal 2D flow from image_t to image_t1.
+
+        Runs the network on cat(image_t, image_t1) to produce a flow field
+        that, when used for backward warping, reconstructs image_t from
+        image_t1.
+
+        Arg(s):
+            image_t : torch.Tensor[float32]
+                N x 3 x H x W image at time t
+            image_t1 : torch.Tensor[float32]
+                N x 3 x H x W image at time t+1
+
+        Returns:
+            list[torch.Tensor[float32]] :
+                4 tensors each (N, 2, H_s, W_s) normalized flow
+                (ch0 = fraction of width, ch1 = fraction of height)
+        '''
+
+        model_input = torch.cat((image_t, image_t1), dim=1)
+
+        if self.model_name == 'monodepth':
+            _, flow_norm = self.net(model_input)
+        elif self.model_name == 'pwc':
+            flow_scale = self.net(model_input)
+            flow_norm = [
+                torch.cat((
+                    flow_scale[i][:, 0:1] / flow_scale[i].shape[3],
+                    flow_scale[i][:, 1:2] / flow_scale[i].shape[2]
+                ), 1) for i in range(4)
+            ]
+
+        return flow_norm
+
     def compute_loss(self, output, batch):
         '''
         Computes the full BDF loss in the original (un-augmented) coordinate frame.
