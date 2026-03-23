@@ -150,6 +150,61 @@ class BDFModel(object):
             'latter': latter,
         }
 
+    def forward_stereo_disparity(self, left, right):
+        '''
+        Predict stereo disparity for a single left-right pair.
+
+        Runs the network on (left, right) and its reverse (right, left)
+        to obtain bidirectional disparity.  Unlike forward(), this does not
+        build the 4-directional-pair batch.
+
+        Arg(s):
+            left : torch.Tensor[float32]
+                N x 3 x H x W left image
+            right : torch.Tensor[float32]
+                N x 3 x H x W right image
+
+        Returns:
+            disp_left : list[torch.Tensor[float32]]
+                4 tensors each (N, 1, H_s, W_s) positive normalised left disparity
+            disp_right : list[torch.Tensor[float32]]
+                4 tensors each (N, 1, H_s, W_s) positive normalised right disparity
+        '''
+
+        model_input = torch.cat((left, right), dim=1)    # (N, 6, H, W)
+        model_input_2 = torch.cat((right, left), dim=1)   # reverse
+
+        if self.model_name == 'monodepth':
+            _disp_scale, disp_norm = self.net(model_input)
+            _disp_scale_2, disp_norm_2 = self.net(model_input_2)
+        elif self.model_name == 'pwc':
+            disp_scale = self.net(model_input)
+            disp_norm = [
+                torch.cat((
+                    disp_scale[i][:, 0, :, :].unsqueeze(1) / disp_scale[i].shape[3],
+                    disp_scale[i][:, 1, :, :].unsqueeze(1) / disp_scale[i].shape[2]
+                ), 1) for i in range(4)
+            ]
+            disp_scale_2 = self.net(model_input_2)
+            disp_norm_2 = [
+                torch.cat((
+                    disp_scale_2[i][:, 0, :, :].unsqueeze(1) / disp_scale_2[i].shape[3],
+                    disp_scale_2[i][:, 1, :, :].unsqueeze(1) / disp_scale_2[i].shape[2]
+                ), 1) for i in range(4)
+            ]
+
+        # Forward direction: cat(left, right) -> Resample2d samples right at
+        # grid_x + flow_u to reconstruct left.  For standard stereo the
+        # horizontal component (ch0) is NEGATIVE (sample leftward in right).
+        # Negate to get positive normalised left disparity.
+        disp_left = [-disp_norm[s][:, 0:1] for s in range(4)]
+
+        # Reverse direction: cat(right, left) -> flow to reconstruct right from
+        # left.  Horizontal component is POSITIVE.
+        disp_right = [disp_norm_2[s][:, 0:1] for s in range(4)]
+
+        return disp_left, disp_right
+
     def compute_loss(self, output, batch):
         '''
         Computes the full BDF loss in the original (un-augmented) coordinate frame.

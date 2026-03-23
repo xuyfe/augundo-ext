@@ -12,6 +12,7 @@ if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
 from external_src.stereo_depth_completion.UnOS.models import Model_stereo, Model_depthflow
+from external_src.stereo_depth_completion.UnOS.monodepth_model import disp_godard
 
 
 class UnOSModel(object):
@@ -109,6 +110,42 @@ class UnOSModel(object):
             cam2pix, pix2cam)
 
         return loss, info
+
+    def forward_disparity(self, left, right):
+        '''
+        Predict stereo disparity without computing loss.
+
+        Calls the shared feature_pyramid_disp and pwc_disp networks in
+        inference mode (is_training=False) to obtain disparity only.
+        Gradients still flow through the shared weights for backpropagation.
+
+        Arg(s):
+            left : torch.Tensor[float32]
+                N x 3 x H x W left image
+            right : torch.Tensor[float32]
+                N x 3 x H x W right image
+
+        Returns:
+            disp_left : list[torch.Tensor[float32]]
+                4 tensors each (N, 1, H_s, W_s) positive normalised left disparity
+            disp_right : list[torch.Tensor[float32]]
+                4 tensors each (N, 1, H_s, W_s) positive normalised right disparity
+        '''
+
+        feat_left = self.model.feature_pyramid_disp(left)
+        feat_right = self.model.feature_pyramid_disp(right)
+
+        # is_training=False skips internal loss computation but keeps gradients
+        disp_est = disp_godard(
+            left, right, feat_left, feat_right, self.opt,
+            is_training=False, pwc_disp_net=self.model.pwc_disp)
+
+        # disp_est: list of 4 tensors (B, 2, H_s, W_s)
+        # ch0 = left disparity (positive), ch1 = right disparity (positive)
+        disp_left = [d[:, 0:1] for d in disp_est]
+        disp_right = [d[:, 1:2] for d in disp_est]
+
+        return disp_left, disp_right
 
     def compute_loss(self, output_loss, output_info):
         '''

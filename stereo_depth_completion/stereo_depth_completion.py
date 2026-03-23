@@ -52,6 +52,8 @@ _log_utils_mod = _import_from_file(
     os.path.join(_project_root, 'utils', 'src', 'log_utils.py'))
 log = _log_utils_mod.log
 
+from stereo_depth_completion.stereo_losses import compute_stereo_loss
+
 
 # ---------------------------------------------------------------------------
 # Stereo-safe geometric augmentation helpers
@@ -169,6 +171,33 @@ def apply_stereo_photometric_augmentation(transforms_photometric,
             random_transform_probability=augmentation_probability)
 
     return aug_left_t, aug_right_t, aug_left_t1, aug_right_t1
+
+
+def _check_flipped(do_flip, n):
+    '''
+    Check whether batch element n was horizontally flipped.
+
+    Arg(s):
+        do_flip : various
+            flip indicator from transform_performed['random_flip_type'].
+            Can be a list/tuple of tensors, a single tensor, or a scalar bool.
+        n : int
+            batch element index
+
+    Returns:
+        bool : True if element n was flipped
+    '''
+
+    if isinstance(do_flip, (list, tuple)):
+        return any(
+            (f[n].item() if hasattr(f, '__getitem__') and hasattr(f[n], 'item') else
+             bool(f[n]) if hasattr(f, '__getitem__') else bool(f))
+            for f in do_flip)
+    elif hasattr(do_flip, '__getitem__'):
+        val = do_flip[n]
+        return bool(val.item() if hasattr(val, 'item') else val)
+    else:
+        return bool(do_flip)
 
 
 def undo_stereo_geometric_augmentation(disparity_maps, transform_performed, padding_mode='edge'):
@@ -428,70 +457,78 @@ def train(model_name,
 
     def _run_one_step(batch_data, train_step, epoch):
         nonlocal running_loss_sum, running_loss_count
-        """Run a single training step. Returns (loss, loss_info)."""
+        """Run a single AugUndo training step.
 
+        Pipeline:
+            1. Load batch and keep original (un-augmented) images
+            2. Apply photometric + geometric augmentation to all 4 images
+            3. Forward pass on augmented stereo pair -> disparity only (no loss)
+            4. Undo geometric augmentation on disparity predictions
+            5. Swap left/right disparity for horizontally flipped batch elements
+            6. Compute stereo reconstruction loss in the original frame
+            7. Backpropagate
+        """
+
+        # ---- 1. Load batch ----
         if model_name == 'bdf':
             # BDF dataloader returns: (left_t, left_t1, right_t, right_t1)
             left_t, left_t1, right_t, right_t1 = [b.to(device) for b in batch_data]
-
-            # Apply photometric augmentation (same params for all 4 images)
-            aug_left_t, aug_right_t, aug_left_t1, aug_right_t1 = \
-                apply_stereo_photometric_augmentation(
-                    transforms_photometric,
-                    left_t, right_t, left_t1, right_t1,
-                    augmentation_probability=augmentation_probability)
-
-            # Apply geometric augmentation (same T_ge for all 4 images)
-            (aug_left_t, aug_right_t, aug_left_t1, aug_right_t1), \
-                transform_performed = apply_stereo_geometric_augmentation(
-                    transforms_geometric,
-                    aug_left_t, aug_right_t, aug_left_t1, aug_right_t1,
-                    augmentation_probability=augmentation_probability,
-                    padding_mode=augmentation_padding_mode)
-
-            # Forward pass in augmented frame
-            output = model_wrapper.forward(
-                aug_left_t, aug_right_t, aug_left_t1, aug_right_t1)
-
-            # Compute loss
-            batch_dict = {
-                'image_left_t': left_t,
-                'image_right_t': right_t,
-                'image_left_t1': left_t1,
-                'image_right_t1': right_t1,
-            }
-            loss, loss_info = model_wrapper.compute_loss(output, batch_dict)
-
         elif model_name == 'unos':
             # UnOS dataloader returns: (left, right, next_left, next_right, cam2pix, pix2cam)
             left_t, right_t, left_t1, right_t1, batch_cam2pix, batch_pix2cam = \
                 [b.to(device) for b in batch_data]
-
-            # Apply photometric augmentation
-            aug_left_t, aug_right_t, aug_left_t1, aug_right_t1 = \
-                apply_stereo_photometric_augmentation(
-                    transforms_photometric,
-                    left_t, right_t, left_t1, right_t1,
-                    augmentation_probability=augmentation_probability)
-
-            # Apply geometric augmentation
-            (aug_left_t, aug_right_t, aug_left_t1, aug_right_t1), \
-                transform_performed = apply_stereo_geometric_augmentation(
-                    transforms_geometric,
-                    aug_left_t, aug_right_t, aug_left_t1, aug_right_t1,
-                    augmentation_probability=augmentation_probability,
-                    padding_mode=augmentation_padding_mode)
-
-            # Forward pass (UnOS computes loss internally)
-            loss, loss_info = model_wrapper.forward(
-                aug_left_t, aug_right_t, aug_left_t1, aug_right_t1,
-                batch_cam2pix, batch_pix2cam)
-
-            if isinstance(loss, torch.Tensor) and loss.dim() > 0:
-                loss = loss.mean()
-
         else:
             raise ValueError('Unknown model: {}'.format(model_name))
+
+        # ---- 2. Apply augmentation ----
+        aug_left_t, aug_right_t, aug_left_t1, aug_right_t1 = \
+            apply_stereo_photometric_augmentation(
+                transforms_photometric,
+                left_t, right_t, left_t1, right_t1,
+                augmentation_probability=augmentation_probability)
+
+        (aug_left_t, aug_right_t, aug_left_t1, aug_right_t1), \
+            transform_performed = apply_stereo_geometric_augmentation(
+                transforms_geometric,
+                aug_left_t, aug_right_t, aug_left_t1, aug_right_t1,
+                augmentation_probability=augmentation_probability,
+                padding_mode=augmentation_padding_mode)
+
+        # ---- 3. Forward pass: disparity only, no internal loss ----
+        if model_name == 'bdf':
+            disp_left_aug, disp_right_aug = \
+                model_wrapper.forward_stereo_disparity(aug_left_t, aug_right_t)
+        elif model_name == 'unos':
+            disp_left_aug, disp_right_aug = \
+                model_wrapper.forward_disparity(aug_left_t, aug_right_t)
+
+        # ---- 4. Undo geometric augmentation on disparity ----
+        disp_left = undo_stereo_geometric_augmentation(
+            disp_left_aug, transform_performed,
+            padding_mode=augmentation_padding_mode)
+        disp_right = undo_stereo_geometric_augmentation(
+            disp_right_aug, transform_performed,
+            padding_mode=augmentation_padding_mode)
+
+        # ---- 5. Swap left/right disparity for flipped batch elements ----
+        # When horizontal flip is applied, apply_stereo_geometric_augmentation
+        # swaps left and right images.  The model therefore predicts left disp
+        # for what was originally the right view and vice versa.  Undo the swap
+        # so disparity channels match the original left/right assignment.
+        if 'random_flip_type' in transform_performed:
+            do_flip = transform_performed['random_flip_type']
+            if do_flip is not None and (not hasattr(do_flip, '__len__') or len(do_flip) > 0):
+                n_batch = left_t.shape[0]
+                for n in range(n_batch):
+                    flipped = _check_flipped(do_flip, n)
+                    if flipped:
+                        for s in range(len(disp_left)):
+                            disp_left[s][n], disp_right[s][n] = \
+                                disp_right[s][n].clone(), disp_left[s][n].clone()
+
+        # ---- 6. Compute loss in the original frame ----
+        loss, loss_info = compute_stereo_loss(
+            left_t, right_t, disp_left, disp_right)
 
         # Backpropagation
         optimizer.zero_grad()
