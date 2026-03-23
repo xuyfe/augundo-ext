@@ -9,6 +9,10 @@ Loss terms:
     L_rec   : photometric reconstruction (alpha * SSIM + (1-alpha) * L1)
     L_sm    : 2nd-order image-edge-aware disparity smoothness
     L_lr    : left-right disparity consistency
+
+Occlusion masking matches the forward-warp approach from UnOS
+(monodepth_model.py build_outputs): forward-warp ones from each view
+to the other, clamp to [0, 1], and use as pixel-wise loss weights.
 '''
 
 import torch
@@ -80,6 +84,145 @@ def warp_left_to_right(left_img, disp_right):
     grid = torch.stack([grid_x_warped, grid_y], dim=-1)
     return F.grid_sample(
         left_img, grid, mode='bilinear', padding_mode='zeros', align_corners=True)
+
+
+def warp_with_flow_2d(source, flow_norm):
+    '''
+    Backward-warp source image using 2D normalized flow.
+
+    Arg(s):
+        source : torch.Tensor[float32]
+            (B, C, H, W) source image to sample from
+        flow_norm : torch.Tensor[float32]
+            (B, 2, H, W) normalized flow (ch0 = fraction of width,
+            ch1 = fraction of height)
+
+    Returns:
+        torch.Tensor[float32] : (B, C, H, W) warped image
+    '''
+
+    B, C, H, W = source.shape
+
+    gy = torch.linspace(-1.0, 1.0, H, device=source.device, dtype=source.dtype)
+    gx = torch.linspace(-1.0, 1.0, W, device=source.device, dtype=source.dtype)
+    grid_y, grid_x = torch.meshgrid(gy, gx, indexing='ij')
+    grid_x = grid_x.unsqueeze(0).expand(B, -1, -1)
+    grid_y = grid_y.unsqueeze(0).expand(B, -1, -1)
+
+    grid_x_warped = grid_x + flow_norm[:, 0] * (2.0 * W / max(W - 1, 1))
+    grid_y_warped = grid_y + flow_norm[:, 1] * (2.0 * H / max(H - 1, 1))
+
+    grid = torch.stack([grid_x_warped, grid_y_warped], dim=-1)
+    return F.grid_sample(
+        source, grid, mode='bilinear', padding_mode='zeros', align_corners=True)
+
+
+# ---------------------------------------------------------------------------
+# Occlusion masking via forward warping
+# ---------------------------------------------------------------------------
+
+def _forward_warp_ones(pixel_disp, direction, H, W):
+    '''
+    Forward-warp a ones tensor horizontally using stereo disparity.
+
+    Implements bilinear splatting: each source pixel at position x is
+    scattered to target position (x +/- d) with bilinear weights. The
+    output indicates how many source pixels cover each target pixel.
+    Clamped to [0, 1] to produce a visibility mask.
+
+    This matches the occlusion masking approach in UnOS
+    (transformerFwd applied to ones tensors in monodepth_model.py).
+
+    Arg(s):
+        pixel_disp : torch.Tensor[float32]
+            (B, H, W) disparity in pixel units (positive)
+        direction : str
+            'left_to_right' or 'right_to_left'
+        H : int
+            image height
+        W : int
+            image width
+
+    Returns:
+        torch.Tensor[float32] : (B, 1, H, W) visibility mask in [0, 1]
+    '''
+
+    B = pixel_disp.shape[0]
+    device = pixel_disp.device
+    dtype = pixel_disp.dtype
+
+    # Source pixel x-coordinates: (B, H, W)
+    x_s = torch.arange(W, device=device, dtype=dtype)
+    x_s = x_s.view(1, 1, W).expand(B, H, -1)
+
+    # Target x-coordinate after disparity shift
+    if direction == 'left_to_right':
+        x_t = x_s - pixel_disp     # left pixel x -> right pixel x - d
+    else:
+        x_t = x_s + pixel_disp     # right pixel x -> left pixel x + d
+
+    # Bilinear weights (horizontal only; y is unchanged for stereo)
+    x0 = torch.floor(x_t).long()
+    x1 = x0 + 1
+    w1 = (x_t - x0.float())        # weight for x1 bin
+    w0 = 1.0 - w1                   # weight for x0 bin
+
+    # Flat index: batch_offset + row_offset + col
+    batch_offset = torch.arange(B, device=device).view(B, 1, 1) * (H * W)
+    row_offset = torch.arange(H, device=device).view(1, H, 1) * W
+    base = (batch_offset + row_offset).expand_as(x0).reshape(-1)
+
+    x0_flat = x0.reshape(-1)
+    x1_flat = x1.reshape(-1)
+    w0_flat = w0.reshape(-1)
+    w1_flat = w1.reshape(-1)
+
+    # Mask out-of-bounds columns
+    valid0 = (x0_flat >= 0) & (x0_flat < W)
+    valid1 = (x1_flat >= 0) & (x1_flat < W)
+
+    idx0 = base + torch.clamp(x0_flat, 0, W - 1)
+    idx1 = base + torch.clamp(x1_flat, 0, W - 1)
+
+    output = torch.zeros(B * H * W, device=device, dtype=dtype)
+    output.scatter_add_(0, idx0[valid0], w0_flat[valid0])
+    output.scatter_add_(0, idx1[valid1], w1_flat[valid1])
+
+    return torch.clamp(output.reshape(B, 1, H, W), 0.0, 1.0)
+
+
+def compute_occlusion_masks(disp_left, disp_right):
+    '''
+    Compute occlusion masks via forward warping of ones tensors.
+
+    Matches the approach in UnOS (monodepth_model.py build_outputs):
+    forward-warp ones from each view to the other using the predicted
+    disparity, then clamp to [0, 1].
+
+    Arg(s):
+        disp_left : torch.Tensor[float32]
+            (B, 1, H, W) positive normalized left disparity (fraction of width)
+        disp_right : torch.Tensor[float32]
+            (B, 1, H, W) positive normalized right disparity (fraction of width)
+
+    Returns:
+        left_occ_mask : torch.Tensor[float32]
+            (B, 1, H, W) left visibility mask (1 = visible from right view)
+        right_occ_mask : torch.Tensor[float32]
+            (B, 1, H, W) right visibility mask (1 = visible from left view)
+    '''
+
+    _, _, H, W = disp_left.shape
+
+    # Right mask: forward-warp ones from left to right using left disparity
+    right_occ_mask = _forward_warp_ones(
+        disp_left[:, 0] * W, 'left_to_right', H, W)
+
+    # Left mask: forward-warp ones from right to left using right disparity
+    left_occ_mask = _forward_warp_ones(
+        disp_right[:, 0] * W, 'right_to_left', H, W)
+
+    return left_occ_mask.detach(), right_occ_mask.detach()
 
 
 # ---------------------------------------------------------------------------
@@ -173,6 +316,10 @@ def compute_stereo_loss(left_img, right_img,
     '''
     Compute stereo reconstruction loss in the original (un-augmented) frame.
 
+    Uses forward-warped occlusion masks (matching UnOS monodepth_model.py)
+    to weight photometric, SSIM, and LR consistency losses so that occluded
+    pixels do not contribute invalid gradients.
+
     Arg(s):
         left_img : torch.Tensor[float32]
             (B, 3, H, W) original left image
@@ -206,32 +353,53 @@ def compute_stereo_loss(left_img, right_img,
     lr_loss     = 0.0
 
     for s in range(num_scales):
-        # -- Photometric reconstruction (SSIM + L1) --
+        # -- Occlusion masks at this scale --
+        left_occ_mask, right_occ_mask = compute_occlusion_masks(
+            disp_left[s], disp_right[s])
+        left_occ_avg = torch.mean(left_occ_mask) + 1e-12
+        right_occ_avg = torch.mean(right_occ_mask) + 1e-12
+
+        # -- Photometric reconstruction (SSIM + L1) with occlusion masking --
         left_est  = warp_right_to_left(right_pyramid[s], disp_left[s])
         right_est = warp_left_to_right(left_pyramid[s],  disp_right[s])
 
-        l1_left   = torch.mean(torch.abs(left_est  - left_pyramid[s]))
-        l1_right  = torch.mean(torch.abs(right_est - right_pyramid[s]))
-        ssim_left  = torch.mean(ssim(left_est,  left_pyramid[s]))
-        ssim_right = torch.mean(ssim(right_est, right_pyramid[s]))
+        # L1 masked by visibility
+        l1_left = torch.mean(
+            torch.abs(left_est - left_pyramid[s]) * left_occ_mask
+        ) / left_occ_avg
+        l1_right = torch.mean(
+            torch.abs(right_est - right_pyramid[s]) * right_occ_mask
+        ) / right_occ_avg
+
+        # SSIM masked by visibility (mask applied to both inputs)
+        ssim_left = torch.mean(
+            ssim(left_est * left_occ_mask, left_pyramid[s] * left_occ_mask)
+        ) / left_occ_avg
+        ssim_right = torch.mean(
+            ssim(right_est * right_occ_mask, right_pyramid[s] * right_occ_mask)
+        ) / right_occ_avg
 
         image_loss += (
             alpha_image_loss * (ssim_left + ssim_right) +
             (1 - alpha_image_loss) * (l1_left + l1_right))
 
-        # -- 2nd-order smoothness --
+        # -- 2nd-order smoothness (no masking needed) --
         smooth_loss += (
             smoothness_loss_2nd_order(disp_left[s],  left_pyramid[s]) +
             smoothness_loss_2nd_order(disp_right[s], right_pyramid[s])
         ) / (2 ** s)
 
-        # -- Left-right consistency --
+        # -- Left-right consistency with occlusion masking --
         right_to_left_disp = warp_right_to_left(disp_right[s], disp_left[s])
         left_to_right_disp = warp_left_to_right(disp_left[s],  disp_right[s])
 
         lr_loss += (
-            torch.mean(torch.abs(right_to_left_disp - disp_left[s])) +
-            torch.mean(torch.abs(left_to_right_disp - disp_right[s])))
+            torch.mean(
+                torch.abs(right_to_left_disp - disp_left[s]) * left_occ_mask
+            ) / left_occ_avg +
+            torch.mean(
+                torch.abs(left_to_right_disp - disp_right[s]) * right_occ_mask
+            ) / right_occ_avg)
 
     smooth_loss *= 0.5
 
@@ -247,3 +415,38 @@ def compute_stereo_loss(left_img, right_img,
     }
 
     return total_loss, loss_info
+
+
+# ---------------------------------------------------------------------------
+# Temporal photometric loss (for BDF temporal pairs)
+# ---------------------------------------------------------------------------
+
+def compute_temporal_photometric_loss(image_t, image_t1, flow_norm,
+                                      alpha_image_loss=0.85):
+    '''
+    Compute temporal photometric reconstruction loss at finest scale only.
+
+    Warps image_t1 to image_t using the predicted 2D flow, then computes
+    alpha * SSIM + (1-alpha) * L1.
+
+    Arg(s):
+        image_t : torch.Tensor[float32]
+            (B, 3, H, W) target image at time t
+        image_t1 : torch.Tensor[float32]
+            (B, 3, H, W) source image at time t+1
+        flow_norm : torch.Tensor[float32]
+            (B, 2, H, W) normalized flow from t to t+1
+            (ch0 = fraction of width, ch1 = fraction of height)
+        alpha_image_loss : float
+            weight between SSIM and L1
+
+    Returns:
+        torch.Tensor[float32] : scalar loss
+    '''
+
+    image_t_est = warp_with_flow_2d(image_t1, flow_norm)
+
+    l1_loss = torch.mean(torch.abs(image_t_est - image_t))
+    ssim_loss = torch.mean(ssim(image_t_est, image_t))
+
+    return alpha_image_loss * ssim_loss + (1 - alpha_image_loss) * l1_loss

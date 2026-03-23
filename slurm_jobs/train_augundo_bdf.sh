@@ -42,7 +42,8 @@ python -u -m stereo_depth_completion.train_stereo_depth_completion \
     --num_epochs 15 \
     --learning_rate 1e-4 \
     --alpha_image_loss 0.85 \
-    --disp_gradient_loss_weight 0.1 \
+    --disp_gradient_loss_weight 10.0 \
+    --temporal_loss_weight 0.1 \
     --lr_loss_weight 0.5 \
     --type_of_2warp 0 \
     --augmentation_types horizontal_flip color_jitter \
