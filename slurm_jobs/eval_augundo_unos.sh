@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=eval_augundo_unos
+#SBATCH --job-name=eval_augundo_unos_simple
 #SBATCH --time=1-00:00:00
 #SBATCH --mail-type=ALL
 #SBATCH --cpus-per-task=4
@@ -16,7 +16,7 @@ source augundo-ext/augundo-py310env/bin/activate
 
 SENIOR_THESIS="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 
-CHECKPOINT_DIR="$SENIOR_THESIS/augundo-ext/checkpoints/augundo_unos"
+CHECKPOINT_DIR="$SENIOR_THESIS/augundo-ext/checkpoints/augundo_unos_new"
 
 # Use CHECKPOINT_FILE env var, or default to the final checkpoint
 if [[ -z "${CHECKPOINT_FILE}" ]]; then

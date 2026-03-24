@@ -1,4 +1,60 @@
-### training and eval unos - current pipeline with occlusion
+### training and eval unos - current pipeline, WITHOUT color jitterness and WITHOUT resize, ONLY horizontal flips (100k iterations)
+
+The following have been reloaded with a version change:
+  1) CUDA/12.9.1 => CUDA/12.6.0
+
+Checkpoint:     /home/ox4/augundo-ext/checkpoints/augundo_unos_new/final/unos_model.pth
+CWD:            /home/ox4
+Restored UnOS model from: /home/ox4/augundo-ext/checkpoints/augundo_unos_new/final/unos_model.pth (step 100000)
+
+--- Evaluating on kitti_2015 (200 images) ---
+
+Depth metrics (KITTI 2015):
+   abs_rel,     sq_rel,        rms,    log_rms,     d1_all,         a1,         a2,         a3
+    0.0728,     0.9745,      4.511,      0.158,      8.516,      0.941,      0.972,      0.985
+
+Disparity metrics (KITTI 2015):
+       epe,   noc_rate,   occ_rate,   err_rate 
+    1.5982,     0.0698,     0.9257,     0.0852 
+
+
+--- Evaluating on kitti_2012 (194 images) ---
+
+Disparity metrics (KITTI 2012):
+       epe,   noc_rate,   occ_rate,   err_rate 
+    1.6678,     0.0597,     0.9570,     0.0805 
+
+Evaluation completed
+
+### training and eval unos - current pipeline WITH color jitterness AND resize (300k iterations)
+The following have been reloaded with a version change:
+  1) CUDA/12.9.1 => CUDA/12.6.0
+
+Checkpoint:     /home/ox4/augundo-ext/checkpoints/augundo_unos/final/unos_model.pth
+CWD:            /home/ox4
+Restored UnOS model from: /home/ox4/augundo-ext/checkpoints/augundo_unos/final/unos_model.pth (step 300000)
+
+--- Evaluating on kitti_2015 (200 images) ---
+
+Depth metrics (KITTI 2015):
+   abs_rel,     sq_rel,        rms,    log_rms,     d1_all,         a1,         a2,         a3
+    0.1126,     1.2930,      5.683,      0.206,     23.704,      0.866,      0.945,      0.975
+
+Disparity metrics (KITTI 2015):
+       epe,   noc_rate,   occ_rate,   err_rate 
+    2.8249,     0.2314,     0.5054,     0.2370 
+
+
+--- Evaluating on kitti_2012 (194 images) ---
+
+Disparity metrics (KITTI 2012):
+       epe,   noc_rate,   occ_rate,   err_rate 
+    4.1936,     0.3235,     0.7021,     0.3326 
+
+Evaluation completed
+
+
+### training and eval unos - old
 The following have been reloaded with a version change:
   1) CUDA/12.9.1 => CUDA/12.6.0
 
