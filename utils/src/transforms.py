@@ -1,6 +1,7 @@
 import torch, random
 import torchvision
 import torchvision.transforms.functional as functional
+from torchvision.transforms import InterpolationMode
 import numpy as np
 import copy
 from PIL import Image
@@ -209,17 +210,17 @@ class Transforms(object):
             assert self.random_resize_and_pad_max <= 1.0
 
         self.__interpolation_mode_map = {
-            'nearest' : Image.NEAREST,
-            'bilinear' : Image.BILINEAR,
-            'bicubic' : Image.BICUBIC,
-            'lanczos' : Image.ANTIALIAS
+            'nearest' : InterpolationMode.NEAREST,
+            'bilinear' : InterpolationMode.BILINEAR,
+            'bicubic' : InterpolationMode.BICUBIC,
+            'lanczos' : InterpolationMode.LANCZOS
         }
 
     def transform(self,
                   images_arr,
                   intrinsics_arr=[],
                   padding_modes=['constant'],
-                  interpolation_modes=[Image.NEAREST],
+                  interpolation_modes=[InterpolationMode.NEAREST],
                   scale_sparse_depth=False,
                   random_transform_probability=0.00):
         '''
@@ -1310,7 +1311,7 @@ class Transforms(object):
                do_rotate,
                angles,
                padding_modes=['constant'],
-               interpolation_modes=[Image.NEAREST]):
+               interpolation_modes=[InterpolationMode.NEAREST]):
         '''
         Rotates each sample
 
@@ -1442,7 +1443,7 @@ class Transforms(object):
     def resize_to_shape(self,
                         images_arr,
                         resize_shape,
-                        interpolation_modes=[Image.NEAREST]):
+                        interpolation_modes=[InterpolationMode.NEAREST]):
         '''
         Resize all images to shape
 
@@ -1486,7 +1487,7 @@ class Transforms(object):
                        scale,
                        padding_modes=['constant'],
                        padding_value=0,
-                       interpolation_modes=[Image.NEAREST]):
+                       interpolation_modes=[InterpolationMode.NEAREST]):
         '''
         Resize and pad images
 
@@ -1574,7 +1575,7 @@ class Transforms(object):
                         resize_shape,
                         start_yx,
                         end_yx,
-                        interpolation_modes=[Image.NEAREST]):
+                        interpolation_modes=[InterpolationMode.NEAREST]):
         '''
         Resize and crop to shape
 
@@ -1719,7 +1720,7 @@ class Transforms(object):
                        do_rotate,
                        original_shapes,
                        angles,
-                       interpolation_modes=[Image.NEAREST]):
+                       interpolation_modes=[InterpolationMode.NEAREST]):
         '''
         Reverse random rotate for images
 
@@ -1884,7 +1885,7 @@ class Transforms(object):
     def reverse_resize_to_shape(self,
                                 images_arr,
                                 resize_shape,
-                                interpolation_modes=[Image.NEAREST]):
+                                interpolation_modes=[InterpolationMode.NEAREST]):
         '''
         Reversing resize to shape
 
@@ -1935,7 +1936,7 @@ class Transforms(object):
                                 end_yx,
                                 padding_modes=['edge'],
                                 padding_value=0,
-                                interpolation_modes=[Image.NEAREST]):
+                                interpolation_modes=[InterpolationMode.NEAREST]):
         '''
         Reversing resize and pad images
 
@@ -1999,7 +2000,7 @@ class Transforms(object):
                     output_image = functional.resize(
                         output_image,
                         size=(n_height, n_width),
-                        interpolation=Image.NEAREST)
+                        interpolation=InterpolationMode.NEAREST)
 
                 # Update the image, do nothing if do resize and crop is False
                 output_images[b] = output_image
@@ -2015,7 +2016,7 @@ class Transforms(object):
                                padding,
                                padding_modes=['constant'],
                                padding_value=0,
-                               interpolation_modes=[Image.NEAREST]):
+                               interpolation_modes=[InterpolationMode.NEAREST]):
         '''
         reversing Resize and pad images
 
