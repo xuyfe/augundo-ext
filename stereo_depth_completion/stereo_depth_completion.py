@@ -229,7 +229,48 @@ def undo_stereo_geometric_augmentation(disparity_maps, transform_performed, padd
     transforms = Transforms()
     tp_copy = dict(transform_performed)
 
-    if isinstance(disparity_maps, (list, tuple)):
+    is_multiscale = isinstance(disparity_maps, (list, tuple))
+    has_resize = ('random_resize_and_crop' in transform_performed or
+                  'random_resize_and_pad' in transform_performed or
+                  'random_resize_to_shape' in transform_performed)
+
+    if is_multiscale and has_resize:
+        # Multi-scale disparity maps have different spatial dimensions at each
+        # scale. The reverse_transform crop/pad coordinates are at full
+        # resolution, so we must first upsample all scales to full resolution,
+        # undo the augmentation at that single resolution, then downsample back.
+        full_h, full_w = disparity_maps[0].shape[2], disparity_maps[0].shape[3]
+        original_shapes = [(d.shape[2], d.shape[3]) for d in disparity_maps]
+
+        # Upsample all to full resolution (bilinear; disparity is continuous)
+        full_res = []
+        for d in disparity_maps:
+            if d.shape[2] == full_h and d.shape[3] == full_w:
+                full_res.append(d)
+            else:
+                full_res.append(
+                    F.interpolate(d, size=(full_h, full_w), mode='bilinear', align_corners=True))
+
+        # Undo at full resolution: pass as single-entry list per scale
+        # to avoid cross-scale confusion in reverse_transform
+        undone_full = []
+        for fr in full_res:
+            tp_i = dict(transform_performed)
+            undone_i = transforms.reverse_transform(
+                images_arr=[fr],
+                transform_performed=tp_i,
+                padding_modes=[padding_mode])
+            undone_full.append(undone_i[0])
+
+        # Downsample back to original per-scale resolutions
+        undone = []
+        for uf, (oh, ow) in zip(undone_full, original_shapes):
+            if uf.shape[2] == oh and uf.shape[3] == ow:
+                undone.append(uf)
+            else:
+                undone.append(
+                    F.interpolate(uf, size=(oh, ow), mode='bilinear', align_corners=True))
+    elif is_multiscale:
         undone = transforms.reverse_transform(
             images_arr=disparity_maps,
             transform_performed=tp_copy,
@@ -504,6 +545,12 @@ def train(model_name,
             # UnOS dataloader returns: (left, right, next_left, next_right, cam2pix, pix2cam)
             left_t, right_t, left_t1, right_t1, batch_cam2pix, batch_pix2cam = \
                 [b.to(device) for b in batch_data]
+
+            # Random temporal swap (50%): use t+1 stereo pair as training input,
+            # matching native UnOS dataloader augmentation (monodepth_dataloader.py)
+            if torch.rand(1).item() < 0.5:
+                left_t, left_t1 = left_t1, left_t
+                right_t, right_t1 = right_t1, right_t
         else:
             raise ValueError('Unknown model: {}'.format(model_name))
 

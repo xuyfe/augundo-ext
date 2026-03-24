@@ -265,9 +265,11 @@ class Transforms(object):
         '''
         if self.do_photometric_transforms:
             for idx, images in enumerate(images_arr):
-                # In case user pass in image as float type
+                # Torchvision photometric ops expect uint8 [0,255] or float [0,1].
+                # If the input is float in [0,1], scale to [0,255] before casting
+                # to uint8 so pixel values are preserved.
                 if torch.is_floating_point(images):
-                    images_arr[idx] = images.to(torch.uint8)
+                    images_arr[idx] = (images * 255.0).clamp(0, 255).to(torch.uint8)
 
         if self.do_random_brightness:
 
@@ -339,10 +341,16 @@ class Transforms(object):
                 images[..., 0:1, :, :] for images in images_arr
             ]
 
-        # Convert all images to float
-        images_arr = [
-            images.float() for images in images_arr
-        ]
+        # Convert back to float [0, 1] if photometric transforms were applied
+        # (images were scaled to uint8 [0, 255] for torchvision ops)
+        if self.do_photometric_transforms:
+            images_arr = [
+                images.float() / 255.0 for images in images_arr
+            ]
+        else:
+            images_arr = [
+                images.float() for images in images_arr
+            ]
 
         if self.do_random_gaussian_blur:
 
