@@ -573,13 +573,15 @@ def train(model_name,
                 smooth_flow_left=stereo_flow_left,
                 smooth_flow_right=stereo_flow_right,
                 smooth_pixel_divisor=20.0,
-                smooth_per_scale=False)
+                smooth_per_scale=False,
+                use_occlusion_mask=False)
         else:
             loss, loss_info = compute_stereo_loss(
                 left_t, right_t, disp_left, disp_right,
                 alpha_image_loss=alpha_image_loss,
                 disp_smooth_weight=disp_smooth_weight,
-                lr_loss_weight=lr_loss_weight)
+                lr_loss_weight=lr_loss_weight,
+                smooth_y_scale=1.0 / 16.0)
 
         # ---- 7. (BDF only) Temporal photometric + flow smoothness loss ----
         if model_name == 'bdf' and temporal_loss_weight > 0:
@@ -646,6 +648,14 @@ def train(model_name,
 
             log_msg = 'Step={:6d}  Epoch={:3d}  AvgLoss={:.5f}  Loss={:.5f}  Time={:.2f}h'.format(
                 train_step, epoch, avg_loss, loss_val, time_elapsed)
+            if isinstance(loss_info, dict):
+                parts = []
+                for k in ['loss_image', 'loss_smooth', 'loss_lr',
+                           'loss_temporal', 'loss_temporal_smooth']:
+                    if k in loss_info:
+                        parts.append('{}={:.4f}'.format(k.replace('loss_', ''), loss_info[k]))
+                if parts:
+                    log_msg += '  ' + '  '.join(parts)
 
             if isinstance(loss_info, dict):
                 for key, val in loss_info.items():

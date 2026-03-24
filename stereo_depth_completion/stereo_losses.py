@@ -258,7 +258,7 @@ def _gradient_y(img):
     return img[:, :, :-1, :] - img[:, :, 1:, :]
 
 
-def smoothness_loss_2nd_order(disp, image):
+def smoothness_loss_2nd_order(disp, image, y_scale=1.0):
     '''
     2nd-order image-edge-aware disparity smoothness loss.
 
@@ -269,6 +269,9 @@ def smoothness_loss_2nd_order(disp, image):
     Arg(s):
         disp  : torch.Tensor[float32]  (B, 1, H, W) disparity map
         image : torch.Tensor[float32]  (B, 3, H, W) reference image for edges
+        y_scale : float
+            relative weight of y-smoothness vs x-smoothness. Native UnOS has a
+            quirk where y is 16x weaker (``1/16``); BDF treats them equally (``1.0``)
 
     Returns:
         torch.Tensor[float32] : scalar smoothness loss
@@ -288,7 +291,7 @@ def smoothness_loss_2nd_order(disp, image):
     loss_x = torch.mean(torch.abs(disp_gxx) * weights_x[:, :, :, :-1])
     loss_y = torch.mean(torch.abs(disp_gyy) * weights_y[:, :, :-1, :])
 
-    return (loss_x + loss_y) / 2.0
+    return (loss_x + y_scale * loss_y) / 2.0
 
 
 def scale_pyramid(img, num_scales):
@@ -316,7 +319,9 @@ def compute_stereo_loss(left_img, right_img,
                         smooth_flow_left=None,
                         smooth_flow_right=None,
                         smooth_pixel_divisor=0.0,
-                        smooth_per_scale=True):
+                        smooth_per_scale=True,
+                        use_occlusion_mask=True,
+                        smooth_y_scale=1.0):
     '''
     Compute stereo reconstruction loss in the original (un-augmented) frame.
 
@@ -355,6 +360,14 @@ def compute_stereo_loss(left_img, right_img,
         smooth_per_scale : bool
             if True, weight smoothness by 1/(2^s) per scale (UnOS default).
             if False, all scales contribute equally (BDF default)
+        use_occlusion_mask : bool
+            if True, use forward-warp occlusion masks (UnOS default).
+            if False, use all-ones masks (BDF native sets stereo pair
+            masks to 1.0 at indices [0,1,6,7])
+        smooth_y_scale : float
+            relative weight of y-smoothness vs x-smoothness in
+            smoothness_loss_2nd_order. Native UnOS has y 16x weaker
+            (use 1/16); BDF treats them equally (use 1.0)
 
     Returns:
         torch.Tensor[float32] : total scalar loss
@@ -370,8 +383,13 @@ def compute_stereo_loss(left_img, right_img,
 
     for s in range(num_scales):
         # -- Occlusion masks at this scale --
-        left_occ_mask, right_occ_mask = compute_occlusion_masks(
-            disp_left[s], disp_right[s])
+        if use_occlusion_mask:
+            left_occ_mask, right_occ_mask = compute_occlusion_masks(
+                disp_left[s], disp_right[s])
+        else:
+            # BDF native: stereo pair masks are all ones (no occlusion masking)
+            left_occ_mask = torch.ones_like(disp_left[s])
+            right_occ_mask = torch.ones_like(disp_right[s])
         left_occ_avg = torch.mean(left_occ_mask) + 1e-12
         right_occ_avg = torch.mean(right_occ_mask) + 1e-12
 
@@ -425,8 +443,8 @@ def compute_stereo_loss(left_img, right_img,
 
         scale_weight = 1.0 / (2 ** s) if smooth_per_scale else 1.0
         smooth_loss += (
-            smoothness_loss_2nd_order(sm_left,  left_pyramid[s]) +
-            smoothness_loss_2nd_order(sm_right, right_pyramid[s])
+            smoothness_loss_2nd_order(sm_left,  left_pyramid[s], y_scale=smooth_y_scale) +
+            smoothness_loss_2nd_order(sm_right, right_pyramid[s], y_scale=smooth_y_scale)
         ) * scale_weight
 
         # -- Left-right consistency with occlusion masking --

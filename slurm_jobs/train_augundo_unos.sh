@@ -38,7 +38,7 @@ python -u -m stereo_depth_completion.train_stereo_depth_completion \
     --input_height 256 \
     --input_width 832 \
     --batch_size 4 \
-    --num_iterations 100000 \
+    --num_iterations 300000 \
     --learning_rate 0.0001 \
     --ssim_weight 0.85 \
     --depth_smooth_weight 10.0 \
@@ -46,11 +46,8 @@ python -u -m stereo_depth_completion.train_stereo_depth_completion \
     --flow_consist_weight 0.01 \
     --flow_diff_threshold 4.0 \
     --num_scales 4 \
-    --augmentation_types horizontal_flip color_jitter \
+    --augmentation_types horizontal_flip \
     --augmentation_probability 1.0 \
-    --augmentation_random_brightness 0.8 1.2 \
-    --augmentation_random_contrast 0.8 1.2 \
-    --augmentation_random_saturation 0.8 1.2 \
     --n_step_per_checkpoint 10000 \
     --n_step_per_summary 1000 \
     --n_thread 4
