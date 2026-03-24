@@ -126,8 +126,8 @@ def apply_stereo_geometric_augmentation(transforms_geometric,
             random_transform_probability=augmentation_probability)
 
     # Handle horizontal flip: swap left and right images
-    if 'random_flip_type' in transform_performed:
-        do_flip = transform_performed['random_flip_type']
+    if 'random_horizontal_flip' in transform_performed:
+        do_flip = transform_performed['random_horizontal_flip']
         if do_flip is not None and len(do_flip) > 0:
             # do_flip is a tensor of booleans per batch element
             for n in range(aug_left_t.shape[0]):
@@ -180,7 +180,7 @@ def _check_flipped(do_flip, n):
 
     Arg(s):
         do_flip : various
-            flip indicator from transform_performed['random_flip_type'].
+            flip indicator from transform_performed['random_horizontal_flip'].
             Can be a list/tuple of tensors, a single tensor, or a scalar bool.
         n : int
             batch element index
@@ -220,19 +220,23 @@ def undo_stereo_geometric_augmentation(disparity_maps, transform_performed, padd
         list[torch.Tensor] or torch.Tensor : disparity maps in original frame
     '''
 
-    # Create a temporary Transforms object just for the reverse operation
-    # We reuse the Transforms class reverse_transform method
+    # Create a temporary Transforms object just for the reverse operation.
+    # We reuse the Transforms class reverse_transform method.
+    # IMPORTANT: reverse_transform destructively pops keys from the dict,
+    # so we must pass a copy to preserve the original for subsequent calls
+    # (e.g. undo disp_right after disp_left) and for the left-right swap step.
     transforms = Transforms()
+    tp_copy = dict(transform_performed)
 
     if isinstance(disparity_maps, (list, tuple)):
         undone = transforms.reverse_transform(
             images_arr=disparity_maps,
-            transform_performed=transform_performed,
+            transform_performed=tp_copy,
             padding_modes=[padding_mode] * len(disparity_maps))
     else:
         undone = transforms.reverse_transform(
             images_arr=[disparity_maps],
-            transform_performed=transform_performed,
+            transform_performed=tp_copy,
             padding_modes=[padding_mode])
 
     # Scale disparity for resize augmentations
@@ -522,7 +526,7 @@ def train(model_name,
         # swaps left and right images.  The model therefore predicts left disp
         # for what was originally the right view and vice versa.  Undo the swap
         # so disparity channels match the original left/right assignment.
-        do_flip = transform_performed.get('random_flip_type')
+        do_flip = transform_performed.get('random_horizontal_flip')
         has_flip = do_flip is not None and (
             not hasattr(do_flip, '__len__') or len(do_flip) > 0)
 
