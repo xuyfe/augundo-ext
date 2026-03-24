@@ -38,7 +38,7 @@ python -u -m stereo_depth_completion.train_stereo_depth_completion \
     --input_height 256 \
     --input_width 832 \
     --batch_size 4 \
-    --num_iterations 300000 \
+    --num_iterations 100000 \
     --learning_rate 0.0001 \
     --ssim_weight 0.85 \
     --depth_smooth_weight 10.0 \
