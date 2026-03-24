@@ -240,36 +240,51 @@ def undo_stereo_geometric_augmentation(disparity_maps, transform_performed, padd
             transform_performed=tp_copy,
             padding_modes=[padding_mode])
 
-    # Scale disparity for resize augmentations
-    scale_factor = 1.0
+    # Scale disparity for resize augmentations.
+    # Normalized disparity (fraction of width) scales with the resize factor:
+    # zooming in by s means d_aug = d_orig * s, so undo requires dividing by s.
+    # The scale can be a per-batch tensor (resize_and_crop, resize_and_pad) or
+    # a scalar (resize_to_shape).
+    scale_factor = None
+
     if 'random_resize_to_shape' in transform_performed:
         resize_info = transform_performed['random_resize_to_shape']
         if resize_info is not None and len(resize_info) >= 2:
-            # resize_info contains original_shape and scale
-            if isinstance(resize_info[-1], (float, int)):
-                scale_factor = 1.0 / resize_info[-1]
+            scale_factor = resize_info[-1]  # scalar float
 
     if 'random_resize_and_crop' in transform_performed:
         resize_info = transform_performed['random_resize_and_crop']
         if resize_info is not None and len(resize_info) >= 5:
-            do_resize = resize_info[0]
-            resize_scale = resize_info[-1]
-            if isinstance(resize_scale, (float, int)) and resize_scale != 1.0:
-                scale_factor = 1.0 / resize_scale
+            do_resize = resize_info[0]   # (N,) bool tensor
+            resize_scale = resize_info[-1]  # (N,) float tensor
+            # Build per-batch scale: 1/s for resized samples, 1.0 for others
+            inv_scale = torch.ones_like(resize_scale)
+            inv_scale[do_resize] = 1.0 / resize_scale[do_resize]
+            scale_factor = inv_scale  # (N,) tensor
 
     if 'random_resize_and_pad' in transform_performed:
         resize_info = transform_performed['random_resize_and_pad']
         if resize_info is not None and len(resize_info) >= 4:
             do_resize = resize_info[0]
             resize_scale = resize_info[-1]
-            if isinstance(resize_scale, (float, int)) and resize_scale != 1.0:
-                scale_factor = 1.0 / resize_scale
+            inv_scale = torch.ones_like(resize_scale)
+            inv_scale[do_resize] = 1.0 / resize_scale[do_resize]
+            scale_factor = inv_scale
 
-    if scale_factor != 1.0:
+    if scale_factor is not None:
         if isinstance(undone, (list, tuple)):
-            undone = [d * scale_factor for d in undone]
+            if torch.is_tensor(scale_factor) and scale_factor.dim() >= 1:
+                # Per-batch scaling: reshape to (N, 1, 1, 1) for broadcasting
+                sf = scale_factor.view(-1, 1, 1, 1)
+                undone = [d * sf for d in undone]
+            else:
+                undone = [d * (1.0 / scale_factor) for d in undone]
         else:
-            undone = undone * scale_factor
+            if torch.is_tensor(scale_factor) and scale_factor.dim() >= 1:
+                sf = scale_factor.view(-1, 1, 1, 1)
+                undone = undone * sf
+            else:
+                undone = undone * (1.0 / scale_factor)
 
     return undone
 

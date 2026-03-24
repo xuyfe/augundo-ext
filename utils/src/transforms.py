@@ -2004,7 +2004,7 @@ class Transforms(object):
                 # Update the image, do nothing if do resize and crop is False
                 output_images[b] = output_image
 
-            images_arr[i] = images
+            images_arr[i] = output_images
 
         return images_arr
 
