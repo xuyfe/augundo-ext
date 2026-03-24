@@ -125,8 +125,9 @@ augundo-ext/stereo_depth_completion/
   ├── unos_model.py                         # UnOS wrapper                        
   ├── stereo_depth_completion_model.py      # Model registry with get_stereo_model()                          
   ├── stereo_depth_completion.py            # Core stereo AugUndo loop                        
-  ├── train_stereo_depth_completion.py      # Training CLI entrypoint                                                 
-  └── run_stereo_depth_completion.py        # Inference CLI entrypoint     
+  ├── train_stereo_depth_completion.py      # Training CLI entrypoint
+  ├── stereo_losess.py                      # Contains helper functions for stereo                          
+  └── run_stereo_depth_completion.py        # Inference CLI entrypoint
 
 The stereo depth completion scripts are based on the scripts under `depth_completion/`.
 
