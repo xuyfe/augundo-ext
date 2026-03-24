@@ -53,7 +53,8 @@ _log_utils_mod = _import_from_file(
 log = _log_utils_mod.log
 
 from stereo_depth_completion.stereo_losses import (
-    compute_stereo_loss, compute_temporal_photometric_loss)
+    compute_stereo_loss, compute_temporal_photometric_loss,
+    compute_flow_smoothness)
 
 
 # ---------------------------------------------------------------------------
@@ -506,8 +507,11 @@ def train(model_name,
                 padding_mode=augmentation_padding_mode)
 
         # ---- 3. Forward pass: disparity only, no internal loss ----
+        stereo_flow_left_aug = None
+        stereo_flow_right_aug = None
+
         if model_name == 'bdf':
-            disp_left_aug, disp_right_aug = \
+            disp_left_aug, disp_right_aug, stereo_flow_left_aug, stereo_flow_right_aug = \
                 model_wrapper.forward_stereo_disparity(aug_left_t, aug_right_t)
         elif model_name == 'unos':
             disp_left_aug, disp_right_aug = \
@@ -520,6 +524,15 @@ def train(model_name,
         disp_right = undo_stereo_geometric_augmentation(
             disp_right_aug, transform_performed,
             padding_mode=augmentation_padding_mode)
+
+        # Also undo on 2-channel stereo flow (BDF smoothness)
+        if stereo_flow_left_aug is not None:
+            stereo_flow_left = undo_stereo_geometric_augmentation(
+                stereo_flow_left_aug, transform_performed,
+                padding_mode=augmentation_padding_mode)
+            stereo_flow_right = undo_stereo_geometric_augmentation(
+                stereo_flow_right_aug, transform_performed,
+                padding_mode=augmentation_padding_mode)
 
         # ---- 5. Swap left/right disparity for flipped batch elements ----
         # When horizontal flip is applied, apply_stereo_geometric_augmentation
@@ -539,14 +552,36 @@ def train(model_name,
                         disp_left[s][n], disp_right[s][n] = \
                             disp_right[s][n].clone(), disp_left[s][n].clone()
 
-        # ---- 6. Compute stereo loss in the original frame ----
-        loss, loss_info = compute_stereo_loss(
-            left_t, right_t, disp_left, disp_right,
-            alpha_image_loss=alpha_image_loss,
-            disp_smooth_weight=disp_smooth_weight,
-            lr_loss_weight=lr_loss_weight)
+                    # Also swap and negate horizontal ch for 2-channel stereo flow
+                    if stereo_flow_left_aug is not None:
+                        for s in range(len(stereo_flow_left)):
+                            stereo_flow_left[s][n], stereo_flow_right[s][n] = \
+                                stereo_flow_right[s][n].clone(), stereo_flow_left[s][n].clone()
+                            # Horizontal flow component was negated during extraction
+                            # in forward_stereo_disparity, so after flip+swap it is
+                            # already in the correct sign convention.
 
-        # ---- 7. (BDF only) Temporal photometric loss ----
+        # ---- 6. Compute stereo loss in the original frame ----
+        # BDF-specific: pass 2-channel flow for smoothness, pixel scale /20,
+        # and equal scale weighting (no 1/(2^s))
+        if model_name == 'bdf':
+            loss, loss_info = compute_stereo_loss(
+                left_t, right_t, disp_left, disp_right,
+                alpha_image_loss=alpha_image_loss,
+                disp_smooth_weight=disp_smooth_weight,
+                lr_loss_weight=lr_loss_weight,
+                smooth_flow_left=stereo_flow_left,
+                smooth_flow_right=stereo_flow_right,
+                smooth_pixel_divisor=20.0,
+                smooth_per_scale=False)
+        else:
+            loss, loss_info = compute_stereo_loss(
+                left_t, right_t, disp_left, disp_right,
+                alpha_image_loss=alpha_image_loss,
+                disp_smooth_weight=disp_smooth_weight,
+                lr_loss_weight=lr_loss_weight)
+
+        # ---- 7. (BDF only) Temporal photometric + flow smoothness loss ----
         if model_name == 'bdf' and temporal_loss_weight > 0:
             # Predict temporal flow in augmented frame
             flow_left_aug = model_wrapper.forward_temporal_flow(
@@ -573,7 +608,7 @@ def train(model_name,
                             flow_left[s][n, 0:1] = -flow_left[s][n, 0:1]
                             flow_right[s][n, 0:1] = -flow_right[s][n, 0:1]
 
-            # Temporal loss at finest scale only
+            # Temporal photometric loss at finest scale
             t_loss_left = compute_temporal_photometric_loss(
                 left_t, left_t1, flow_left[0],
                 alpha_image_loss=alpha_image_loss)
@@ -581,8 +616,17 @@ def train(model_name,
                 right_t, right_t1, flow_right[0],
                 alpha_image_loss=alpha_image_loss)
             t_loss = t_loss_left + t_loss_right
-            loss = loss + temporal_loss_weight * t_loss
+
+            # Temporal flow smoothness (matching native BDF which includes
+            # temporal pair smoothness in disp_gradient_loss)
+            t_smooth = (
+                compute_flow_smoothness(
+                    flow_left, left_t, pixel_divisor=20.0, per_scale=False) +
+                compute_flow_smoothness(
+                    flow_right, right_t, pixel_divisor=20.0, per_scale=False))
+            loss = loss + temporal_loss_weight * t_loss + disp_smooth_weight * t_smooth
             loss_info['loss_temporal'] = t_loss.item()
+            loss_info['loss_temporal_smooth'] = t_smooth.item()
             loss_info['loss'] = loss.item()
 
         # ---- 8. Backpropagation ----

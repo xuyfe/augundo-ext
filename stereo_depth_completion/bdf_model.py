@@ -169,6 +169,12 @@ class BDFModel(object):
                 4 tensors each (N, 1, H_s, W_s) positive normalised left disparity
             disp_right : list[torch.Tensor[float32]]
                 4 tensors each (N, 1, H_s, W_s) positive normalised right disparity
+            flow_left : list[torch.Tensor[float32]]
+                4 tensors each (N, 2, H_s, W_s) full normalised flow for left
+                reconstruction (ch0 = positive horiz disparity, ch1 = vertical)
+            flow_right : list[torch.Tensor[float32]]
+                4 tensors each (N, 2, H_s, W_s) full normalised flow for right
+                reconstruction
         '''
 
         model_input = torch.cat((left, right), dim=1)    # (N, 6, H, W)
@@ -203,7 +209,18 @@ class BDFModel(object):
         # left.  Horizontal component is POSITIVE.
         disp_right = [disp_norm_2[s][:, 0:1] for s in range(4)]
 
-        return disp_left, disp_right
+        # Full 2-channel normalised flow for smoothness computation.
+        # Use absolute value of ch0 (positive disparity convention) + original ch1.
+        flow_left = [
+            torch.cat((-disp_norm[s][:, 0:1], disp_norm[s][:, 1:2]), dim=1)
+            for s in range(4)
+        ]
+        flow_right = [
+            torch.cat((disp_norm_2[s][:, 0:1], disp_norm_2[s][:, 1:2]), dim=1)
+            for s in range(4)
+        ]
+
+        return disp_left, disp_right, flow_left, flow_right
 
     def forward_temporal_flow(self, image_t, image_t1):
         '''

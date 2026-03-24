@@ -312,7 +312,11 @@ def compute_stereo_loss(left_img, right_img,
                         alpha_image_loss=0.85,
                         disp_smooth_weight=10.0,
                         lr_loss_weight=1.0,
-                        num_scales=4):
+                        num_scales=4,
+                        smooth_flow_left=None,
+                        smooth_flow_right=None,
+                        smooth_pixel_divisor=0.0,
+                        smooth_per_scale=True):
     '''
     Compute stereo reconstruction loss in the original (un-augmented) frame.
 
@@ -339,6 +343,18 @@ def compute_stereo_loss(left_img, right_img,
             left-right consistency weight (1.0 matches UnOS)
         num_scales : int
             number of pyramid scales (4 for both models)
+        smooth_flow_left : list[torch.Tensor[float32]] or None
+            if provided, use these (B, C, H_s, W_s) tensors for smoothness
+            instead of disp_left. Allows passing multi-channel flow (BDF)
+        smooth_flow_right : list[torch.Tensor[float32]] or None
+            same for right view
+        smooth_pixel_divisor : float
+            if > 0, convert normalised disparity/flow to pixel scale and
+            divide by this value before smoothness (BDF uses 20.0, matching
+            native ``cal_grad2_error(disp_scale / 20, ...)``)
+        smooth_per_scale : bool
+            if True, weight smoothness by 1/(2^s) per scale (UnOS default).
+            if False, all scales contribute equally (BDF default)
 
     Returns:
         torch.Tensor[float32] : total scalar loss
@@ -383,11 +399,35 @@ def compute_stereo_loss(left_img, right_img,
             alpha_image_loss * (ssim_left + ssim_right) +
             (1 - alpha_image_loss) * (l1_left + l1_right))
 
-        # -- 2nd-order smoothness (no masking needed) --
+        # -- 2nd-order smoothness --
+        # Select what to compute smoothness on: explicit flow or disparity
+        sm_left = smooth_flow_left[s] if smooth_flow_left is not None else disp_left[s]
+        sm_right = smooth_flow_right[s] if smooth_flow_right is not None else disp_right[s]
+
+        # Optionally convert from normalised to pixel-scale / divisor
+        # For 2-channel flow: ch0 is fraction of width, ch1 is fraction of height,
+        # so scale each channel by its respective spatial dimension.
+        if smooth_pixel_divisor > 0:
+            W_s = sm_left.shape[3]
+            H_s = sm_left.shape[2]
+            if sm_left.shape[1] >= 2:
+                scale_x = W_s / smooth_pixel_divisor
+                scale_y = H_s / smooth_pixel_divisor
+                sm_left = torch.cat([
+                    sm_left[:, 0:1] * scale_x,
+                    sm_left[:, 1:] * scale_y], dim=1)
+                sm_right = torch.cat([
+                    sm_right[:, 0:1] * scale_x,
+                    sm_right[:, 1:] * scale_y], dim=1)
+            else:
+                sm_left = sm_left * (W_s / smooth_pixel_divisor)
+                sm_right = sm_right * (W_s / smooth_pixel_divisor)
+
+        scale_weight = 1.0 / (2 ** s) if smooth_per_scale else 1.0
         smooth_loss += (
-            smoothness_loss_2nd_order(disp_left[s],  left_pyramid[s]) +
-            smoothness_loss_2nd_order(disp_right[s], right_pyramid[s])
-        ) / (2 ** s)
+            smoothness_loss_2nd_order(sm_left,  left_pyramid[s]) +
+            smoothness_loss_2nd_order(sm_right, right_pyramid[s])
+        ) * scale_weight
 
         # -- Left-right consistency with occlusion masking --
         right_to_left_disp = warp_right_to_left(disp_right[s], disp_left[s])
@@ -450,3 +490,50 @@ def compute_temporal_photometric_loss(image_t, image_t1, flow_norm,
     ssim_loss = torch.mean(ssim(image_t_est, image_t))
 
     return alpha_image_loss * ssim_loss + (1 - alpha_image_loss) * l1_loss
+
+
+def compute_flow_smoothness(flow_list, image, num_scales=4,
+                            pixel_divisor=0.0, per_scale=True):
+    '''
+    Compute 2nd-order smoothness loss on multi-scale 2D flow.
+
+    Used to add temporal flow smoothness for BDF (matching native BDF which
+    computes smoothness on all 4 directional pairs including temporal flows).
+
+    Arg(s):
+        flow_list : list[torch.Tensor[float32]]
+            num_scales tensors each (B, 2, H_s, W_s) normalised flow
+        image : torch.Tensor[float32]
+            (B, 3, H, W) reference image for edge-aware weighting
+        num_scales : int
+            number of scales
+        pixel_divisor : float
+            if > 0, convert normalised flow to pixel scale / divisor
+        per_scale : bool
+            if True, weight by 1/(2^s) per scale
+
+    Returns:
+        torch.Tensor[float32] : scalar smoothness loss
+    '''
+
+    image_pyramid = scale_pyramid(image, num_scales)
+    loss = 0.0
+
+    for s in range(num_scales):
+        flow_s = flow_list[s]
+        if pixel_divisor > 0:
+            W_s = flow_s.shape[3]
+            H_s = flow_s.shape[2]
+            if flow_s.shape[1] >= 2:
+                scale_x = W_s / pixel_divisor
+                scale_y = H_s / pixel_divisor
+                flow_s = torch.cat([
+                    flow_s[:, 0:1] * scale_x,
+                    flow_s[:, 1:] * scale_y], dim=1)
+            else:
+                flow_s = flow_s * (W_s / pixel_divisor)
+
+        scale_weight = 1.0 / (2 ** s) if per_scale else 1.0
+        loss += smoothness_loss_2nd_order(flow_s, image_pyramid[s]) * scale_weight
+
+    return loss * 0.5
