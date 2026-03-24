@@ -41,6 +41,8 @@ python -u -m stereo_depth_completion.train_stereo_depth_completion \
     --batch_size 2 \
     --num_epochs 15 \
     --learning_rate 1e-4 \
+    --learning_rates 1e-4 5e-5 2.5e-5 1.25e-5 6.25e-6 \
+    --learning_schedule 3 6 9 12 \
     --alpha_image_loss 0.85 \
     --disp_gradient_loss_weight 10.0 \
     --temporal_loss_weight 0.1 \
