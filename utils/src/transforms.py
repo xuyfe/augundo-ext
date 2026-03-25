@@ -1083,6 +1083,7 @@ class Transforms(object):
         '''
 
         for i, images in enumerate(images_arr):
+            images = images.clone()
 
             for b, image in enumerate(images):
                 if do_gaussian_blur[b]:
@@ -1115,6 +1116,7 @@ class Transforms(object):
         '''
 
         for i, images in enumerate(images_arr):
+            images = images.clone()
             device = images.device
 
             for b, image in enumerate(images):
