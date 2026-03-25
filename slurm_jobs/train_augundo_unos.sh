@@ -18,7 +18,7 @@ SENIOR_THESIS="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 UNOS_SRC="$SENIOR_THESIS/augundo-ext/external_src/stereo_depth_completion/UnOS"
 
 DATA_PATH="${DATA_PATH:-$SENIOR_THESIS/augundo-ext/data/kitti_raw_data}"
-CHECKPOINT_DIR="$SENIOR_THESIS/augundo-ext/checkpoints/augundo_unos"
+CHECKPOINT_DIR="$SENIOR_THESIS/augundo-ext/checkpoints/augundo_unos_full"
 mkdir -p "$CHECKPOINT_DIR"
 
 echo "Data dir:       $DATA_PATH"
