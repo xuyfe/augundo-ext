@@ -1,4 +1,22 @@
-### training and eval unos - current pipeline, WITHOUT color jitterness and WITHOUT resize, ONLY horizontal flips (100k iterations)
+### training and eval unos - current pipeline (w/ horizontal flop, temporal flop, resize, and color/brightness)
+--- Evaluating on kitti_2015 (200 images) ---
+
+Depth metrics (KITTI 2015):
+   abs_rel,     sq_rel,        rms,    log_rms,     d1_all,         a1,         a2,         a3
+    0.0634,     0.9367,      4.405,      0.141,      7.421,      0.952,      0.980,      0.989
+
+Disparity metrics (KITTI 2015):
+       epe,   noc_rate,   occ_rate,   err_rate 
+    1.3512,     0.0698,     0.2700,     0.0742 
+
+
+--- Evaluating on kitti_2012 (194 images) ---
+
+Disparity metrics (KITTI 2012):
+       epe,   noc_rate,   occ_rate,   err_rate 
+    1.2432,     0.0596,     0.4320,     0.0686 
+
+### training and eval unos - old pipeline, WITHOUT color jitterness and WITHOUT resize, ONLY horizontal flips (100k iterations)
 
 The following have been reloaded with a version change:
   1) CUDA/12.9.1 => CUDA/12.6.0
@@ -26,7 +44,7 @@ Disparity metrics (KITTI 2012):
 
 Evaluation completed
 
-### training and eval unos - current pipeline WITH color jitterness AND resize (300k iterations)
+### training and eval unos - old pipeline WITH color jitterness AND resize (300k iterations)
 The following have been reloaded with a version change:
   1) CUDA/12.9.1 => CUDA/12.6.0
 
