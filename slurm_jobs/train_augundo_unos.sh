@@ -46,12 +46,17 @@ python -u -m stereo_depth_completion.train_stereo_depth_completion \
     --flow_consist_weight 0.01 \
     --flow_diff_threshold 4.0 \
     --num_scales 4 \
-    --augmentation_types horizontal_flip color_jitter resize \
+    --augmentation_types horizontal_flip color_jitter resize gaussian_blur noise \
     --augmentation_probability 1.0 \
     --augmentation_random_brightness 0.8 1.2 \
     --augmentation_random_contrast 0.8 1.2 \
     --augmentation_random_saturation 0.8 1.2 \
     --augmentation_random_resize_and_crop 1.0 1.5 \
+    --augmentation_random_resize_and_pad 0.5 1.0 \
+    --augmentation_random_gaussian_blur_kernel_size 3 5 7 \
+    --augmentation_random_gaussian_blur_sigma_range 0.1 2.0 \
+    --augmentation_random_noise_type gaussian \
+    --augmentation_random_noise_spread 0.02 \
     --n_step_per_checkpoint 10000 \
     --n_step_per_summary 1000 \
     --n_thread 4

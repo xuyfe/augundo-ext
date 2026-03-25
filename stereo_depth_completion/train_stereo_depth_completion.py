@@ -90,6 +90,23 @@ def get_args():
     parser.add_argument('--augmentation_random_resize_to_shape', type=float, nargs=2,
                         default=[-1, -1],
                         help='resize-to-shape scale range [min, max]')
+    parser.add_argument('--augmentation_random_gaussian_blur_kernel_size', type=int, nargs='+',
+                        default=[-1, -1],
+                        help='kernel sizes for gaussian blur (e.g. 3 5 7)')
+    parser.add_argument('--augmentation_random_gaussian_blur_sigma_range', type=float, nargs=2,
+                        default=[-1, -1],
+                        help='sigma range for gaussian blur [min, max]')
+    parser.add_argument('--augmentation_random_noise_type', type=str, default='none',
+                        choices=['none', 'gaussian', 'uniform'],
+                        help='type of random noise to add')
+    parser.add_argument('--augmentation_random_noise_spread', type=float, default=-1,
+                        help='noise spread (std for gaussian, range for uniform)')
+    parser.add_argument('--augmentation_random_remove_patch_percent_range', type=float, nargs=2,
+                        default=[-1, -1],
+                        help='percent range of pixels to remove [min, max]')
+    parser.add_argument('--augmentation_random_remove_patch_size', type=int, nargs='+',
+                        default=[1, 1],
+                        help='patch size [h, w] or [h1, w1, h2, w2] for range')
     parser.add_argument('--augmentation_padding_mode', type=str, default='edge',
                         help='padding mode for geometric augmentation')
 
@@ -233,6 +250,13 @@ def main():
     hue = args.augmentation_random_hue if 'color_jitter' in args.augmentation_types else [-1, -1]
     saturation = args.augmentation_random_saturation if 'color_jitter' in args.augmentation_types else [-1, -1]
 
+    blur_kernel = args.augmentation_random_gaussian_blur_kernel_size if 'gaussian_blur' in args.augmentation_types else [-1, -1]
+    blur_sigma = args.augmentation_random_gaussian_blur_sigma_range if 'gaussian_blur' in args.augmentation_types else [-1, -1]
+    noise_type = args.augmentation_random_noise_type if 'noise' in args.augmentation_types else 'none'
+    noise_spread = args.augmentation_random_noise_spread if 'noise' in args.augmentation_types else -1
+    remove_patch_percent = args.augmentation_random_remove_patch_percent_range if 'remove_patch' in args.augmentation_types else [-1, -1]
+    remove_patch_size = args.augmentation_random_remove_patch_size if 'remove_patch' in args.augmentation_types else [1, 1]
+
     # Resolve training duration: either num_iterations or num_epochs
     num_epochs = args.num_epochs
     num_iterations = args.num_iterations
@@ -271,6 +295,12 @@ def main():
         augmentation_random_gamma=gamma,
         augmentation_random_hue=hue,
         augmentation_random_saturation=saturation,
+        augmentation_random_gaussian_blur_kernel_size=blur_kernel,
+        augmentation_random_gaussian_blur_sigma_range=blur_sigma,
+        augmentation_random_noise_type=noise_type,
+        augmentation_random_noise_spread=noise_spread,
+        augmentation_random_remove_patch_percent_range=remove_patch_percent,
+        augmentation_random_remove_patch_size=remove_patch_size,
         augmentation_padding_mode=args.augmentation_padding_mode,
         alpha_image_loss=loss_alpha,
         disp_smooth_weight=loss_smooth,
