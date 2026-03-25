@@ -61,7 +61,8 @@ from stereo_depth_completion.stereo_losses import (
 # Stereo-safe geometric augmentation helpers
 # ---------------------------------------------------------------------------
 
-STEREO_VALID_AUGMENTATIONS = {'horizontal_flip', 'resize', 'horizontal_translate', 'color_jitter'}
+STEREO_VALID_AUGMENTATIONS = {'horizontal_flip', 'resize', 'horizontal_translate', 'color_jitter',
+                              'gaussian_blur', 'noise', 'remove_patch'}
 STEREO_INVALID_AUGMENTATIONS = {'rotation', 'vertical_flip', 'vertical_translate'}
 
 
@@ -424,6 +425,12 @@ def train(model_name,
           augmentation_random_gamma=None,
           augmentation_random_hue=None,
           augmentation_random_saturation=None,
+          augmentation_random_gaussian_blur_kernel_size=None,
+          augmentation_random_gaussian_blur_sigma_range=None,
+          augmentation_random_noise_type='none',
+          augmentation_random_noise_spread=-1,
+          augmentation_random_remove_patch_percent_range=None,
+          augmentation_random_remove_patch_size=None,
           augmentation_padding_mode='edge',
           # Loss weights
           alpha_image_loss=0.85,
@@ -487,7 +494,13 @@ def train(model_name,
         random_contrast=augmentation_random_contrast if augmentation_random_contrast else [-1, -1],
         random_gamma=augmentation_random_gamma if augmentation_random_gamma else [-1, -1],
         random_hue=augmentation_random_hue if augmentation_random_hue else [-1, -1],
-        random_saturation=augmentation_random_saturation if augmentation_random_saturation else [-1, -1])
+        random_saturation=augmentation_random_saturation if augmentation_random_saturation else [-1, -1],
+        random_gaussian_blur_kernel_size=augmentation_random_gaussian_blur_kernel_size if augmentation_random_gaussian_blur_kernel_size else [-1, -1],
+        random_gaussian_blur_sigma_range=augmentation_random_gaussian_blur_sigma_range if augmentation_random_gaussian_blur_sigma_range else [-1, -1],
+        random_noise_type=augmentation_random_noise_type if augmentation_random_noise_type else 'none',
+        random_noise_spread=augmentation_random_noise_spread if augmentation_random_noise_spread else -1,
+        random_remove_patch_percent_range=augmentation_random_remove_patch_percent_range if augmentation_random_remove_patch_percent_range else [-1, -1],
+        random_remove_patch_size=augmentation_random_remove_patch_size if augmentation_random_remove_patch_size else [1, 1])
 
     # Optimizer
     optimizer = torch.optim.Adam(model_wrapper.parameters(), lr=learning_rate)
