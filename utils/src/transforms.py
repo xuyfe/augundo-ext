@@ -1540,6 +1540,8 @@ class Transforms(object):
 
         for i, (images, interpolation_mode, padding_mode) in enumerate(zip(images_arr, interpolation_modes, padding_modes)):
 
+            images_padded = []
+
             for b, image in enumerate(images):
                 if do_resize_and_pad[b]:
 
@@ -1579,9 +1581,11 @@ class Transforms(object):
                         end_x = start_x + max_width
                         image = image[..., start_y:end_y, start_x:end_x]
 
-                    images[b, ...] = image
+                    images_padded.append(image)
+                else:
+                    images_padded.append(image)
 
-            images_arr[i] = images
+            images_arr[i] = torch.stack(images_padded, dim=0)
 
         return images_arr
 
@@ -2067,6 +2071,8 @@ class Transforms(object):
 
         for i, (images, interpolation_mode, padding_mode) in enumerate(zip(images_arr, interpolation_modes, padding_modes)):
 
+            output_images = []
+
             for b, _ in enumerate(images):
                 image = images[b, ...]
                 if do_resize_and_pad[b]:
@@ -2112,9 +2118,11 @@ class Transforms(object):
                             fill=padding_value,
                             padding_mode=padding_mode)
 
-                    images[b, ...] = image
+                    output_images.append(image)
+                else:
+                    output_images.append(image)
 
-            images_arr[i] = images
+            images_arr[i] = torch.stack(output_images, dim=0)
 
         return images_arr
 
