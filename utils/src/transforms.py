@@ -956,6 +956,7 @@ class Transforms(object):
         '''
 
         for i, images in enumerate(images_arr):
+            images = images.clone()
 
             for b, image in enumerate(images):
                 if do_brightness[b]:
@@ -981,6 +982,7 @@ class Transforms(object):
         '''
 
         for i, images in enumerate(images_arr):
+            images = images.clone()
 
             for b, image in enumerate(images):
                 if do_contrast[b]:
@@ -1006,6 +1008,7 @@ class Transforms(object):
         '''
 
         for i, images in enumerate(images_arr):
+            images = images.clone()
 
             for b, image in enumerate(images):
                 if do_gamma[b]:
@@ -1031,6 +1034,7 @@ class Transforms(object):
         '''
 
         for i, images in enumerate(images_arr):
+            images = images.clone()
 
             for b, image in enumerate(images):
                 if do_hue[b]:
@@ -1056,6 +1060,7 @@ class Transforms(object):
         '''
 
         for i, images in enumerate(images_arr):
+            images = images.clone()
 
             for b, image in enumerate(images):
                 if do_saturation[b]:
@@ -1158,6 +1163,7 @@ class Transforms(object):
         '''
 
         for i, images in enumerate(images_arr):
+            images = images.clone()
 
             for b, image in enumerate(images):
                 if do_remove[b]:
