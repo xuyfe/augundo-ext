@@ -16,7 +16,7 @@ source augundo-ext/augundo-py310env/bin/activate
 
 SENIOR_THESIS="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 
-CHECKPOINT_DIR="$SENIOR_THESIS/augundo-ext/checkpoints/augundo_bdf"
+CHECKPOINT_DIR="$SENIOR_THESIS/augundo-ext/checkpoints/augundo_bdf_full"
 RESULTS_DIR="$SENIOR_THESIS/augundo-ext/results/augundo_bdf"
 mkdir -p "$RESULTS_DIR"
 

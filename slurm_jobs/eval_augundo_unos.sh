@@ -16,7 +16,7 @@ source augundo-ext/augundo-py310env/bin/activate
 
 SENIOR_THESIS="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 
-CHECKPOINT_DIR="$SENIOR_THESIS/augundo-ext/checkpoints/augundo_unos"
+CHECKPOINT_DIR="$SENIOR_THESIS/augundo-ext/checkpoints/augundo_unos_full"
 
 # Use CHECKPOINT_FILE env var, or default to the final checkpoint
 if [[ -z "${CHECKPOINT_FILE}" ]]; then
