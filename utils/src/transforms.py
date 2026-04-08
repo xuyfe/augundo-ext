@@ -31,7 +31,8 @@ class Transforms(object):
                  random_crop_and_pad=[-1, -1],
                  random_resize_to_shape=[-1, -1],
                  random_resize_and_crop=[-1, -1],
-                 random_resize_and_pad=[-1, -1]):
+                 random_resize_and_pad=[-1, -1],
+                 random_horizontal_translate=[-1, -1]):
         '''
         Transforms and augmentation class
 
@@ -77,6 +78,10 @@ class Transforms(object):
                 min and max percentrage to resize for random resize and will crop back to original shape
             random_resize_and_pad : list[float]
                 min and max percentage to resize for random resize and pad back to original shape
+            random_horizontal_translate : list[float]
+                min and max horizontal translation as a fraction of width [-1, 1].
+                Positive values shift content right; negative shift left.
+                If both are -1, disabled.
         '''
 
         # Image normalization
@@ -209,6 +214,18 @@ class Transforms(object):
             assert self.random_resize_and_pad_min > 0
             assert self.random_resize_and_pad_max <= 1.0
 
+        # Horizontal translation: range is given as fraction of width
+        # e.g. [-0.1, 0.1] means shift content by up to +/- 10% of width
+        self.do_random_horizontal_translate = True if -1 not in random_horizontal_translate else False
+
+        self.random_horizontal_translate_min = random_horizontal_translate[0]
+        self.random_horizontal_translate_max = random_horizontal_translate[1]
+
+        if self.do_random_horizontal_translate:
+            assert self.random_horizontal_translate_min < self.random_horizontal_translate_max
+            assert self.random_horizontal_translate_min >= -1.0
+            assert self.random_horizontal_translate_max <= 1.0
+
         self.__interpolation_mode_map = {
             'nearest' : InterpolationMode.NEAREST,
             'bilinear' : InterpolationMode.BILINEAR,
@@ -275,7 +292,7 @@ class Transforms(object):
 
             do_brightness = torch.logical_and(
                 do_random_transform,
-                torch.rand(n_batch, device=device) >= 0.50)
+                torch.rand(n_batch, device=device) <= 0.50)
 
             values = torch.rand(n_batch, device=device)
 
@@ -693,6 +710,35 @@ class Transforms(object):
                 scale
             ]
 
+        if self.do_random_horizontal_translate:
+
+            do_horizontal_translate = torch.logical_and(
+                do_random_transform,
+                torch.rand(n_batch, device=device) <= 0.50)
+
+            # Random translation as fraction of width, then convert to integer pixels
+            range_h = self.random_horizontal_translate_max - self.random_horizontal_translate_min
+            translate_fracs = torch.rand((n_batch,), device=device) * range_h + \
+                self.random_horizontal_translate_min
+            translate_pixels = (translate_fracs * n_width).int()
+
+            images_arr = self.horizontal_translate(
+                images_arr,
+                do_horizontal_translate=do_horizontal_translate,
+                translate_pixels=translate_pixels,
+                padding_modes=padding_modes)
+
+            # Adjust intrinsics: positive translation shifts content right,
+            # equivalent to shifting principal point by +translate_pixels
+            intrinsics_arr = self.adjust_intrinsics(
+                intrinsics_arr,
+                x_offsets=translate_pixels.float())
+
+            transform_performed['random_horizontal_translate'] = [
+                do_horizontal_translate,
+                translate_pixels
+            ]
+
         if self.do_random_rotate:
 
             do_rotate = torch.logical_and(
@@ -846,6 +892,16 @@ class Transforms(object):
                 padding=padding,
                 padding_modes=padding_modes,
                 interpolation_modes=transform_performed['interpolation_modes'])
+
+        if 'random_horizontal_translate' in transform_performed:
+            do_horizontal_translate, translate_pixels = \
+                transform_performed.pop('random_horizontal_translate')
+
+            images_arr = self.reverse_horizontal_translate(
+                images_arr,
+                do_horizontal_translate=do_horizontal_translate,
+                translate_pixels=translate_pixels,
+                padding_modes=padding_modes)
 
         if 'random_crop_and_pad' in transform_performed:
             do_crop_and_pad, start_yx, end_yx, padding = transform_performed.pop('random_crop_and_pad')
@@ -1290,6 +1346,76 @@ class Transforms(object):
 
         return images_arr
 
+    def horizontal_translate(self,
+                             images_arr,
+                             do_horizontal_translate,
+                             translate_pixels,
+                             padding_modes=['edge'],
+                             padding_value=0):
+        '''
+        Apply horizontal translation to each sample.
+        Positive translate_pixels shifts content to the right (left side gets padded);
+        negative translate_pixels shifts content to the left (right side gets padded).
+
+        Arg(s):
+            images_arr : list[torch.Tensor[float32]]
+                list of N x C x H x W tensors
+            do_horizontal_translate : torch.Tensor[bool]
+                N booleans, whether to translate each sample
+            translate_pixels : torch.Tensor[int]
+                N integer pixel offsets
+            padding_modes : list[str]
+                list of padding modes per image array
+            padding_value : float
+                value to pad with when mode is 'constant'
+        Returns:
+            list[torch.Tensor[float32]] : list of translated N x C x H x W image tensors
+        '''
+
+        n_images_arr = len(images_arr)
+
+        if len(padding_modes) < n_images_arr:
+            padding_modes = \
+                padding_modes + [padding_modes[-1]] * (n_images_arr - len(padding_modes))
+
+        for i, (images, padding_mode) in enumerate(zip(images_arr, padding_modes)):
+
+            translated_images = []
+            width = images.shape[-1]
+
+            for b, image in enumerate(images):
+                if do_horizontal_translate[b]:
+                    offset = int(translate_pixels[b].item())
+
+                    if offset > 0:
+                        # Shift right by offset: drop rightmost columns, pad on left
+                        offset = min(offset, width)
+                        cropped = image[..., :, :width - offset]
+                        translated = functional.pad(
+                            cropped,
+                            (offset, 0, 0, 0),
+                            padding_mode=padding_mode,
+                            fill=padding_value)
+                    elif offset < 0:
+                        # Shift left by |offset|: drop leftmost columns, pad on right
+                        abs_offset = min(-offset, width)
+                        cropped = image[..., :, abs_offset:]
+                        translated = functional.pad(
+                            cropped,
+                            (0, abs_offset, 0, 0),
+                            padding_mode=padding_mode,
+                            fill=padding_value)
+                    else:
+                        translated = image
+
+                    translated_images.append(translated)
+                else:
+                    translated_images.append(image)
+
+            images_arr[i] = torch.stack(translated_images, dim=0)
+
+        return images_arr
+
     def vertical_flip(self, images_arr, do_vertical_flip, in_place=False):
         '''
         Perform vertical flip on each sample
@@ -1719,6 +1845,37 @@ class Transforms(object):
         '''
 
         return self.horizontal_flip(images_arr, do_horizontal_flip, in_place=False)
+
+    def reverse_horizontal_translate(self,
+                                     images_arr,
+                                     do_horizontal_translate,
+                                     translate_pixels,
+                                     padding_modes=['edge'],
+                                     padding_value=0):
+        '''
+        Reverse horizontal translation by applying the negated translation.
+
+        Arg(s):
+            images_arr : list[torch.Tensor]
+                list of N x C x H x W tensors
+            do_horizontal_translate : torch.Tensor[bool]
+                N booleans, whether the sample was translated
+            translate_pixels : torch.Tensor[int]
+                N pixel offsets that were applied in the forward direction
+            padding_modes : list[str]
+                list of padding modes per image array
+            padding_value : float
+                value to pad with when mode is 'constant'
+        Returns:
+            list[torch.Tensor] : list of N x C x H x W tensors
+        '''
+
+        return self.horizontal_translate(
+            images_arr,
+            do_horizontal_translate=do_horizontal_translate,
+            translate_pixels=-translate_pixels,
+            padding_modes=padding_modes,
+            padding_value=padding_value)
 
     def reverse_vertical_flip(self, images_arr, do_vertical_flip):
         '''

@@ -69,7 +69,8 @@ STEREO_INVALID_AUGMENTATIONS = {'rotation', 'vertical_flip', 'vertical_translate
 def create_stereo_geometric_transforms(augmentation_random_flip_type=None,
                                        augmentation_random_resize_and_crop=None,
                                        augmentation_random_resize_and_pad=None,
-                                       augmentation_random_resize_to_shape=None):
+                                       augmentation_random_resize_to_shape=None,
+                                       augmentation_random_horizontal_translate=None):
     '''
     Creates a Transforms object with only stereo-safe geometric augmentations.
     Rotation and vertical flips are explicitly excluded.
@@ -90,7 +91,8 @@ def create_stereo_geometric_transforms(augmentation_random_flip_type=None,
         random_crop_and_pad=[-1, -1],  # Disable crop-and-pad (can introduce vertical translation)
         random_resize_to_shape=augmentation_random_resize_to_shape if augmentation_random_resize_to_shape else [-1, -1],
         random_resize_and_pad=augmentation_random_resize_and_pad if augmentation_random_resize_and_pad else [-1, -1],
-        random_resize_and_crop=augmentation_random_resize_and_crop if augmentation_random_resize_and_crop else [-1, -1])
+        random_resize_and_crop=augmentation_random_resize_and_crop if augmentation_random_resize_and_crop else [-1, -1],
+        random_horizontal_translate=augmentation_random_horizontal_translate if augmentation_random_horizontal_translate else [-1, -1])
 
 
 def apply_stereo_geometric_augmentation(transforms_geometric,
@@ -233,7 +235,8 @@ def undo_stereo_geometric_augmentation(disparity_maps, transform_performed, padd
     is_multiscale = isinstance(disparity_maps, (list, tuple))
     has_resize = ('random_resize_and_crop' in transform_performed or
                   'random_resize_and_pad' in transform_performed or
-                  'random_resize_to_shape' in transform_performed)
+                  'random_resize_to_shape' in transform_performed or
+                  'random_horizontal_translate' in transform_performed)
 
     if is_multiscale and has_resize:
         # Multi-scale disparity maps have different spatial dimensions at each
@@ -420,6 +423,7 @@ def train(model_name,
           augmentation_random_resize_and_crop=None,
           augmentation_random_resize_and_pad=None,
           augmentation_random_resize_to_shape=None,
+          augmentation_random_horizontal_translate=None,
           augmentation_random_brightness=None,
           augmentation_random_contrast=None,
           augmentation_random_gamma=None,
@@ -486,7 +490,8 @@ def train(model_name,
         augmentation_random_flip_type=augmentation_random_flip_type,
         augmentation_random_resize_and_crop=augmentation_random_resize_and_crop,
         augmentation_random_resize_and_pad=augmentation_random_resize_and_pad,
-        augmentation_random_resize_to_shape=augmentation_random_resize_to_shape)
+        augmentation_random_resize_to_shape=augmentation_random_resize_to_shape,
+        augmentation_random_horizontal_translate=augmentation_random_horizontal_translate)
 
     # Create photometric transforms
     transforms_photometric = Transforms(
