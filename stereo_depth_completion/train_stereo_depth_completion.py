@@ -90,6 +90,9 @@ def get_args():
     parser.add_argument('--augmentation_random_resize_to_shape', type=float, nargs=2,
                         default=[-1, -1],
                         help='resize-to-shape scale range [min, max]')
+    parser.add_argument('--augmentation_random_horizontal_translate', type=float, nargs=2,
+                        default=[-1, -1],
+                        help='horizontal translation range as fraction of width [min, max] in [-1, 1]')
     parser.add_argument('--augmentation_random_gaussian_blur_kernel_size', type=int, nargs='+',
                         default=[-1, -1],
                         help='kernel sizes for gaussian blur (e.g. 3 5 7)')
@@ -243,6 +246,7 @@ def main():
     resize_and_crop = args.augmentation_random_resize_and_crop if 'resize' in args.augmentation_types else [-1, -1]
     resize_and_pad = args.augmentation_random_resize_and_pad if 'resize' in args.augmentation_types else [-1, -1]
     resize_to_shape = args.augmentation_random_resize_to_shape if 'resize' in args.augmentation_types else [-1, -1]
+    horizontal_translate = args.augmentation_random_horizontal_translate if 'horizontal_translate' in args.augmentation_types else [-1, -1]
 
     brightness = args.augmentation_random_brightness if 'color_jitter' in args.augmentation_types else [-1, -1]
     contrast = args.augmentation_random_contrast if 'color_jitter' in args.augmentation_types else [-1, -1]
@@ -290,6 +294,7 @@ def main():
         augmentation_random_resize_and_crop=resize_and_crop,
         augmentation_random_resize_and_pad=resize_and_pad,
         augmentation_random_resize_to_shape=resize_to_shape,
+        augmentation_random_horizontal_translate=horizontal_translate,
         augmentation_random_brightness=brightness,
         augmentation_random_contrast=contrast,
         augmentation_random_gamma=gamma,
