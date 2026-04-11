@@ -1402,7 +1402,7 @@ class Transforms(object):
                         cropped = image[..., :, abs_offset:]
                         translated = functional.pad(
                             cropped,
-                            (0, abs_offset, 0, 0),
+                            (0, 0, abs_offset, 0),
                             padding_mode=padding_mode,
                             fill=padding_value)
                     else:
