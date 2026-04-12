@@ -1242,6 +1242,9 @@ class Transforms(object):
                         stride=1,
                         padding=[int(k // 2) for k in patch_size])
 
+                    # Crop mask back to original spatial size in case of even kernel sizes
+                    mask = mask[..., :image.shape[-2], :image.shape[-1]]
+
                     mask[mask == float('inf')] = 0.0
 
                     images[b, ...] = mask * image
