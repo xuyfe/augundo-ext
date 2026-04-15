@@ -362,7 +362,7 @@ def create_bdf_dataloader(data_path, filenames_file, input_height, input_width,
 
     left_1, left_2, right_1, right_2 = get_kitti_cycle_data(filenames_file, data_path)
 
-    dataset = myCycleImageFolder(left_1, left_2, right_1, right_2, False, param)
+    dataset = myCycleImageFolder(left_1, left_2, right_1, right_2, True, param)
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,
