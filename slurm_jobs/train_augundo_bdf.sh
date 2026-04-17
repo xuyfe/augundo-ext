@@ -48,12 +48,16 @@ python -u -m stereo_depth_completion.train_stereo_depth_completion \
     --temporal_loss_weight 0.1 \
     --lr_loss_weight 0.5 \
     --type_of_2warp 0 \
-    --augmentation_types horizontal_translate color_jitter \
-    --augmentation_probability 1.0 \
+    --augmentation_types horizontal_translate color_jitter gaussian_blur noise \
+    --augmentation_probability 0.5 \
+    --augmentation_warmup_epochs 5 \
     --augmentation_random_contrast 0.9 1.1 \
-    --augmentation_random_saturation 0.9 1.1 \
     --augmentation_random_hue -0.05 0.05 \
     --augmentation_random_horizontal_translate -0.05 0.05 \
+    --augmentation_random_gaussian_blur_kernel_size 3 5 7 \
+    --augmentation_random_gaussian_blur_sigma_range 0.1 2.0 \
+    --augmentation_random_noise_type gaussian \
+    --augmentation_random_noise_spread 0.02 \
     --checkpoint_every_epoch \
     --n_step_per_summary 100 \
     --n_thread 4
