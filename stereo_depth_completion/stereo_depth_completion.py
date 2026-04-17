@@ -436,6 +436,7 @@ def train(model_name,
           augmentation_random_remove_patch_percent_range=None,
           augmentation_random_remove_patch_size=None,
           augmentation_padding_mode='edge',
+          augmentation_warmup_epochs=0,
           # Loss weights
           alpha_image_loss=0.85,
           disp_smooth_weight=10.0,
@@ -573,17 +574,20 @@ def train(model_name,
             raise ValueError('Unknown model: {}'.format(model_name))
 
         # ---- 2. Apply augmentation ----
+        # Skip AugUndo augmentations during warmup period
+        effective_aug_prob = augmentation_probability if epoch >= augmentation_warmup_epochs else 0.0
+
         aug_left_t, aug_right_t, aug_left_t1, aug_right_t1 = \
             apply_stereo_photometric_augmentation(
                 transforms_photometric,
                 left_t, right_t, left_t1, right_t1,
-                augmentation_probability=augmentation_probability)
+                augmentation_probability=effective_aug_prob)
 
         (aug_left_t, aug_right_t, aug_left_t1, aug_right_t1), \
             transform_performed = apply_stereo_geometric_augmentation(
                 transforms_geometric,
                 aug_left_t, aug_right_t, aug_left_t1, aug_right_t1,
-                augmentation_probability=augmentation_probability,
+                augmentation_probability=effective_aug_prob,
                 padding_mode=augmentation_padding_mode)
 
         # ---- 3. Forward pass: disparity only, no internal loss ----

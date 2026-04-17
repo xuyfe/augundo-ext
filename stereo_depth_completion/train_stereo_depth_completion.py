@@ -66,6 +66,8 @@ def get_args():
                              'Rotation is NEVER allowed for stereo.')
     parser.add_argument('--augmentation_probability', type=float, default=1.0,
                         help='probability of applying augmentation per sample')
+    parser.add_argument('--augmentation_warmup_epochs', type=int, default=0,
+                        help='number of epochs to train without augmentation before enabling')
     parser.add_argument('--augmentation_random_brightness', type=float, nargs=2,
                         default=[-1, -1],
                         help='brightness augmentation range')
@@ -290,6 +292,7 @@ def main():
         model_wrapper=model_wrapper,
         dataloader=dataloader,
         augmentation_probability=args.augmentation_probability,
+        augmentation_warmup_epochs=args.augmentation_warmup_epochs,
         augmentation_random_flip_type=flip_type,
         augmentation_random_resize_and_crop=resize_and_crop,
         augmentation_random_resize_and_pad=resize_and_pad,
