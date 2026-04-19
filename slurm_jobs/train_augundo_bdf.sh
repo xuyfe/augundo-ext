@@ -45,12 +45,12 @@ python -u -m stereo_depth_completion.train_stereo_depth_completion \
     --learning_schedule 3 6 9 12 \
     --alpha_image_loss 0.85 \
     --disp_gradient_loss_weight 10.0 \
-    --temporal_loss_weight 0.1 \
+    --temporal_loss_weight 0.0 \
     --lr_loss_weight 0.5 \
     --type_of_2warp 0 \
     --augmentation_types horizontal_translate color_jitter gaussian_blur noise \
-    --augmentation_probability 0.5 \
-    --augmentation_warmup_epochs 5 \
+    --augmentation_probability 1.0 \
+    --augmentation_warmup_epochs 0 \
     --augmentation_random_contrast 0.9 1.1 \
     --augmentation_random_hue -0.05 0.05 \
     --augmentation_random_horizontal_translate -0.05 0.05 \

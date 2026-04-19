@@ -658,7 +658,7 @@ def train(model_name,
                 smooth_flow_right=stereo_flow_right,
                 smooth_pixel_divisor=20.0,
                 smooth_per_scale=False,
-                use_occlusion_mask=False)
+                use_occlusion_mask=True)
         else:
             loss, loss_info = compute_stereo_loss(
                 left_t, right_t, disp_left, disp_right,
