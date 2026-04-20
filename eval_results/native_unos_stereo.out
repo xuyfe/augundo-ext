@@ -1,0 +1,26 @@
+
+The following have been reloaded with a version change:
+  1) CUDA/12.9.1 => CUDA/12.6.0
+
+Data dir:       /home/ox4/augundo-ext/data/kitti_raw_data
+Checkpoint dir: /home/ox4/augundo-ext/checkpoints/unos
+CWD:            /home/ox4
+2026-03-13 21:27:34.572581: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-03-13 21:27:34.886784: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+2026-03-13 21:27:39.745153: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+Evaluation at iter [0]: 
+disp err 2012 is 
+       epe,   noc_rate,   occ_rate,   err_rate 
+    2.8083,     0.1499,     0.8717,     0.1666 
+
+   abs_rel,     sq_rel,        rms,    log_rms,     d1_all,         a1,         a2,         a3 
+    0.0956,     1.1856,      5.465,      0.183,     15.764,      0.910,      0.965,      0.983 
+disp err 2015 is 
+       epe,   noc_rate,   occ_rate,   err_rate 
+    2.3621,     0.1456,     0.8286,     0.1576 
+
+Constructing models and inputs.
+Using device: cuda
+Evaluate depth at iter [0] kitti_2015
+Evaluation completed
