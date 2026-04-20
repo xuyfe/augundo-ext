@@ -214,7 +214,7 @@ class Model_depth(nn.Module):
             curr_src = _to_nhwc(_resize_area(image2, (Hs, Ws)))
 
             # depth_flow from depth + pose
-            depth_s = _to_nhwc(pred_depth[s][:, 0:1, :, :])  # left depth only
+            depth_s = pred_depth[s][:, 0, :, :]  # left depth only, (B, H, W)
             depth_flow, pose_mat = inverse_warp(
                 depth_s, pred_poses,
                 cam2pix[:, s, :, :], pix2cam[:, s, :, :])
@@ -294,8 +294,8 @@ class Model_depthflow(nn.Module):
             optical_flows_rev, B, H, W, opt.num_scales, device)
 
         # Refined pose via inverse_warp_new at scale 0
-        depth1_s0 = _to_nhwc(pred_depth[0][:, 0:1, :, :])
-        depth2_s0 = _to_nhwc(1.0 / pred_disp_rev[0][:, 0:1, :, :])
+        depth1_s0 = pred_depth[0][:, 0, :, :]
+        depth2_s0 = 1.0 / pred_disp_rev[0][:, 0, :, :]
         _, pose_mat, _, _ = inverse_warp_new(
             depth1_s0, depth2_s0, pred_poses,
             cam2pix[:, 0, :, :], pix2cam[:, 0, :, :],
@@ -314,7 +314,7 @@ class Model_depthflow(nn.Module):
             occu_mask = occu_masks[s]
 
             # Rigid flow from depth + refined pose
-            depth_s = _to_nhwc(pred_depth[s][:, 0:1, :, :])
+            depth_s = pred_depth[s][:, 0, :, :]  # (B, H, W)
             depth_flow, pose_mat = inverse_warp(
                 depth_s, pose_mat.detach(),
                 cam2pix[:, s, :, :], pix2cam[:, s, :, :])
@@ -501,7 +501,7 @@ class Model_eval_depth(nn.Module):
         pix2cam = pix2cam.unsqueeze(0).to(input_1.device)
 
         s = 0
-        depth_s = _to_nhwc(1.0 / pred_disp[s][:, 0:1, :, :])
+        depth_s = 1.0 / pred_disp[s][:, 0, :, :]  # (B, H, W)
         depth_flow, pose_mat = inverse_warp(
             depth_s, pred_poses,
             cam2pix[:, s, :, :], pix2cam[:, s, :, :])
@@ -570,8 +570,8 @@ class Model_eval_depthflow(nn.Module):
             transformerFwd(ones_nhwc, optical_flows_rev[s], [Hs, Ws]),
             min=0.0, max=1.0)
 
-        depth1 = _to_nhwc(1.0 / pred_disp[0][:, 0:1, :, :])
-        depth2 = _to_nhwc(1.0 / pred_disp_rev[0][:, 0:1, :, :])
+        depth1 = 1.0 / pred_disp[0][:, 0, :, :]  # (B, H, W)
+        depth2 = 1.0 / pred_disp_rev[0][:, 0, :, :]  # (B, H, W)
         depth_flow, pose_mat, disp1_trans, small_mask = inverse_warp_new(
             depth1, depth2, pred_poses,
             cam2pix[:, 0, :, :], pix2cam[:, 0, :, :],
