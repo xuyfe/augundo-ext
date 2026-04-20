@@ -257,6 +257,78 @@ def eval_bdf(args, device):
         abs_rel.mean(), sq_rel.mean(), rms.mean(), log_rms.mean(),
         d1_all.mean(), a1.mean(), a2.mean(), a3.mean()))
 
+    # Disparity metrics (EPE, noc_rate, occ_rate, err_rate) on KITTI 2015
+    from external_src.stereo_depth_completion.UnOS.eval.evaluate_disp import (
+        eval_disp_avg)
+
+    gt_2015_training = os.path.join(args.gt_path, 'training')
+    pred_disps_list = [disparities[i] for i in range(num_samples)]
+    try:
+        disp_err = eval_disp_avg(pred_disps_list, gt_2015_training, disp_num=0)
+        print('\nDisparity metrics (KITTI 2015):')
+        print(disp_err)
+    except Exception as e:
+        print('Disp eval error: {}'.format(e))
+
+    # Disparity metrics on KITTI 2012 (requires separate inference on 194 images)
+    if args.gt_2012_path:
+        print('\n--- KITTI 2012 evaluation ---')
+        num_2012 = 194
+        disparities_2012 = np.zeros(
+            (num_2012, args.input_height, args.input_width), dtype=np.float32)
+
+        with torch.no_grad():
+            for i in range(num_2012):
+                left_path = os.path.join(
+                    args.gt_2012_path, 'image_0',
+                    '{:06d}_10.png'.format(i))
+                right_path = os.path.join(
+                    args.gt_2012_path, 'image_1',
+                    '{:06d}_10.png'.format(i))
+                img_left = cv2.imread(left_path)
+                img_right = cv2.imread(right_path)
+                if img_left is None or img_right is None:
+                    print('Warning: could not load KITTI 2012 image {}'.format(i))
+                    continue
+                img_left = cv2.cvtColor(img_left, cv2.COLOR_BGR2RGB)
+                img_right = cv2.cvtColor(img_right, cv2.COLOR_BGR2RGB)
+                img_left = cv2.resize(
+                    img_left, (args.input_width, args.input_height))
+                img_right = cv2.resize(
+                    img_right, (args.input_width, args.input_height))
+
+                left_t = torch.from_numpy(
+                    img_left.transpose(2, 0, 1)).float().unsqueeze(0) / 255.0
+                right_t = torch.from_numpy(
+                    img_right.transpose(2, 0, 1)).float().unsqueeze(0) / 255.0
+
+                left_batch = torch.cat(
+                    (left_t, torch.flip(left_t, [3])), 0)
+                right_batch = torch.cat(
+                    (right_t, torch.flip(right_t, [3])), 0)
+                model_input = torch.cat(
+                    (left_batch, right_batch), 1).to(device)
+
+                if args.bdf_model_name == 'monodepth':
+                    _, disp_est = net(model_input)
+                elif args.bdf_model_name == 'pwc':
+                    disp_est_scale = net(model_input)
+                    disp_est = [torch.cat((
+                        disp_est_scale[s][:, 0:1] / disp_est_scale[s].shape[3],
+                        disp_est_scale[s][:, 1:2] / disp_est_scale[s].shape[2]),
+                        1) for s in range(4)]
+
+                disparities_2012[i] = \
+                    -disp_est[0][0, 0, :, :].detach().cpu().numpy()
+
+        pred_disps_2012 = [disparities_2012[i] for i in range(num_2012)]
+        try:
+            disp_err_2012 = eval_disp_avg(pred_disps_2012, args.gt_2012_path)
+            print('\nDisparity metrics (KITTI 2012):')
+            print(disp_err_2012)
+        except Exception as e:
+            print('Disp eval 2012 error: {}'.format(e))
+
 
 # ---------------------------------------------------------------------------
 # UnOS evaluation

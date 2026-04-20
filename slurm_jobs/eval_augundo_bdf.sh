@@ -41,6 +41,7 @@ python -u -m stereo_depth_completion.run_stereo_depth_completion \
     --model bdf \
     --restore_path "$CHECKPOINT_FILE" \
     --gt_path "$SENIOR_THESIS/augundo-ext/data/scene_flow_2015" \
+    --gt_2012_path "$SENIOR_THESIS/augundo-ext/data/stereo_2012/training" \
     --output_path "$RESULTS_DIR" \
     --bdf_model_name monodepth \
     --input_height 256 \
