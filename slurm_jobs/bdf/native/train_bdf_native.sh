@@ -30,9 +30,12 @@ echo "CWD:            $(pwd)"
 # Run from augundo-ext so imports resolve
 cd "$SENIOR_THESIS/augundo-ext" || exit 1
 
-# Train BDF with only the augmentations native UnOS uses:
+# Train BDF with the augmentations used in the original BDF codebase:
 #   - horizontal flip (with L/R swap)
-#   - no photometric augmentations
+#   - photometric jitter (each applied with 0.5 prob when augmentation is enabled):
+#       - gamma in [0.8, 1.2]
+#       - brightness in [0.5, 2.0]
+#       - color (approx. via saturation in [0.8, 1.2])
 python -u -m stereo_depth_completion.train_stereo_depth_completion \
     --model bdf \
     --data_path "$DATA_PATH" \
@@ -51,9 +54,12 @@ python -u -m stereo_depth_completion.train_stereo_depth_completion \
     --temporal_loss_weight 0.0 \
     --lr_loss_weight 0.5 \
     --type_of_2warp 0 \
-    --augmentation_types horizontal_flip \
+    --augmentation_types horizontal_flip color_jitter \
     --augmentation_probability 1.0 \
     --augmentation_warmup_epochs 0 \
+    --augmentation_random_gamma 0.8 1.2 \
+    --augmentation_random_brightness 0.5 2.0 \
+    --augmentation_random_saturation 0.8 1.2 \
     --checkpoint_every_epoch \
     --n_step_per_summary 100 \
     --n_thread 4
