@@ -22,7 +22,7 @@ CHECKPOINT_DIR="$SENIOR_THESIS/augundo-ext/checkpoints/unos_native_depthflow"
 mkdir -p "$CHECKPOINT_DIR"
 
 # Initialize from the native (non-AugUndo) stereo checkpoint
-STEREO_CHECKPOINT="/home/ox4/augundo-ext/checkpoints/unos"
+STEREO_CHECKPOINT="/home/ox4/augundo-ext/checkpoints/unos/model-final.pt"
 
 echo "Data dir:           $DATA_PATH"
 echo "Checkpoint dir:     $CHECKPOINT_DIR"
