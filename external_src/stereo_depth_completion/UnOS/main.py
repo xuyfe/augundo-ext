@@ -79,6 +79,9 @@ def get_args():
                         help='pose seq to evaluate')
     parser.add_argument('--num_scales', type=int, default=4,
                         help='number of multi-scale levels')
+    parser.add_argument('--disp_freeze_iters', type=int, default=0,
+                        help='freeze disparity network for this many iterations '
+                             '(useful when starting depthflow from stereo checkpoint)')
     return parser.parse_args()
 
 
@@ -203,9 +206,28 @@ def main():
              gt_flows_2015, noc_masks_2015, gt_masks, opt, device)
         return
 
+    # Freeze disparity network during warmup (depthflow from stereo checkpoint)
+    raw_model_ref = model.module if hasattr(model, 'module') else model
+    disp_frozen = False
+    if opt.disp_freeze_iters > 0 and hasattr(raw_model_ref, 'pwc_disp'):
+        for p in raw_model_ref.pwc_disp.parameters():
+            p.requires_grad = False
+        for p in raw_model_ref.feature_pyramid_disp.parameters():
+            p.requires_grad = False
+        disp_frozen = True
+        print(f'Freezing disparity network for {opt.disp_freeze_iters} iterations')
+
     model.train()
     data_iter = iter(dataloader)
     for itr in range(start_itr, opt.num_iterations):
+        # Unfreeze disparity network after warmup
+        if disp_frozen and itr >= opt.disp_freeze_iters:
+            for p in raw_model_ref.pwc_disp.parameters():
+                p.requires_grad = True
+            for p in raw_model_ref.feature_pyramid_disp.parameters():
+                p.requires_grad = True
+            disp_frozen = False
+            print(f'Unfreezing disparity network at iteration {itr}')
         # Get next batch, restart dataloader if exhausted
         try:
             batch = next(data_iter)
@@ -222,6 +244,7 @@ def main():
         if isinstance(loss, torch.Tensor) and loss.dim() > 0:
             loss = loss.mean()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
 
         # Logging
@@ -230,8 +253,8 @@ def main():
                 writer.add_scalar(key, val, itr)
 
         if itr % 100 == 0:
-            sys.stderr.write(
-                f'iter {itr}: total_loss = {info.get("total_loss", loss.item()):.4f}\n')
+            parts = ' | '.join(f'{k}={v:.4f}' for k, v in info.items())
+            sys.stderr.write(f'iter {itr}: {parts}\n')
 
         # Save checkpoint
         if itr % SAVE_INTERVAL == 2 and itr > 0:
