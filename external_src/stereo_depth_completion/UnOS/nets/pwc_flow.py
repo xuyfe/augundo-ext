@@ -194,9 +194,9 @@ class PWCFlow(nn.Module):
     is implemented as the ``forward`` method.
     """
 
-    def __init__(self):
+    def __init__(self, feature_pyramid=None):
         super().__init__()
-        self.feature_pyramid = FeaturePyramidFlow()
+        self.feature_pyramid = feature_pyramid if feature_pyramid is not None else FeaturePyramidFlow()
         self.cost_vol = CostVolume(d=4)
 
         cv_ch = 81  # (2*4+1)^2
