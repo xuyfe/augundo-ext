@@ -88,6 +88,10 @@ def get_args():
     parser.add_argument('--flow_consist_weight', type=float, default=0.01)
     parser.add_argument('--flow_diff_threshold', type=float, default=4.0)
 
+    # Flow evaluation
+    parser.add_argument('--eval_flow', action='store_true', default=False,
+                        help='also evaluate optical flow metrics')
+
     # Hardware
     parser.add_argument('--device', type=str, default='cuda',
                         help='device (cuda or cpu)')
@@ -329,6 +333,82 @@ def eval_bdf(args, device):
         except Exception as e:
             print('Disp eval 2012 error: {}'.format(e))
 
+    # Optical flow evaluation (BDF)
+    if args.eval_flow:
+        from external_src.stereo_depth_completion.UnOS.eval.evaluate_flow import (
+            load_gt_flow_kitti, eval_flow_avg)
+
+        gt_2015_training = os.path.join(args.gt_path, 'training')
+
+        class _FlowOpt:
+            pass
+        flow_opt = _FlowOpt()
+        flow_opt.img_height = args.input_height
+        flow_opt.img_width = args.input_width
+        flow_opt.gt_2015_dir = gt_2015_training
+        flow_opt.trace = args.output_path or '.'
+
+        # Predict temporal flow on KITTI 2015 (200 consecutive frame pairs)
+        print('\n--- Optical flow evaluation (KITTI 2015) ---')
+        pred_flows = []
+        with torch.no_grad():
+            for i in range(num_samples):
+                # Load consecutive frames
+                img_t_path = os.path.join(
+                    gt_2015_training, 'image_0', '{:06d}_10.png'.format(i))
+                img_t1_path = os.path.join(
+                    gt_2015_training, 'image_0', '{:06d}_11.png'.format(i))
+
+                img_t = cv2.imread(img_t_path)
+                img_t1 = cv2.imread(img_t1_path)
+                if img_t is None or img_t1 is None:
+                    print('Warning: could not load flow image {}'.format(i))
+                    pred_flows.append(np.zeros(
+                        (args.input_height, args.input_width, 2),
+                        dtype=np.float32))
+                    continue
+
+                img_t = cv2.cvtColor(img_t, cv2.COLOR_BGR2RGB)
+                img_t1 = cv2.cvtColor(img_t1, cv2.COLOR_BGR2RGB)
+                img_t = cv2.resize(
+                    img_t, (args.input_width, args.input_height))
+                img_t1 = cv2.resize(
+                    img_t1, (args.input_width, args.input_height))
+
+                t_tensor = torch.from_numpy(
+                    img_t.transpose(2, 0, 1)).float().unsqueeze(0) / 255.0
+                t1_tensor = torch.from_numpy(
+                    img_t1.transpose(2, 0, 1)).float().unsqueeze(0) / 255.0
+
+                # BDF: feed (image_t, image_t1) as stereo pair to get flow
+                model_input = torch.cat(
+                    (t_tensor, t1_tensor), 1).to(device)
+
+                if args.bdf_model_name == 'monodepth':
+                    _, disp_est = net(model_input)
+                elif args.bdf_model_name == 'pwc':
+                    disp_est_scale = net(model_input)
+                    disp_est = [torch.cat((
+                        disp_est_scale[s][:, 0:1] / disp_est_scale[s].shape[3],
+                        disp_est_scale[s][:, 1:2] / disp_est_scale[s].shape[2]),
+                        1) for s in range(4)]
+
+                # Extract 2-channel flow (normalized), convert to HWC numpy
+                flow = disp_est[0][0].detach().cpu().numpy()  # (2, H, W)
+                flow = flow.transpose(1, 2, 0)  # (H, W, 2)
+                pred_flows.append(flow)
+
+        print('Flow inference complete. {} samples'.format(len(pred_flows)))
+
+        try:
+            gt_flows, noc_masks = load_gt_flow_kitti('kitti', flow_opt)
+            flow_err = eval_flow_avg(
+                gt_flows, noc_masks, pred_flows, flow_opt)
+            print('\nOptical flow metrics (KITTI 2015):')
+            print(flow_err)
+        except Exception as e:
+            print('Flow eval error: {}'.format(e))
+
 
 # ---------------------------------------------------------------------------
 # UnOS evaluation
@@ -347,7 +427,8 @@ def eval_unos(args, device):
                               'stereo_depth_completion', 'UnOS')
 
     from external_src.stereo_depth_completion.UnOS.models import (
-        Model_stereo, Model_eval_stereo)
+        Model_stereo, Model_depthflow,
+        Model_eval_stereo, Model_eval_depthflow)
     from external_src.stereo_depth_completion.UnOS.eval.evaluate_flow import (
         get_scaled_intrinsic_matrix)
     from external_src.stereo_depth_completion.UnOS.eval.evaluate_depth import (
@@ -355,7 +436,7 @@ def eval_unos(args, device):
     from external_src.stereo_depth_completion.UnOS.eval.evaluate_disp import (
         eval_disp_avg)
 
-    # Build opt object for Model_eval_stereo
+    # Build opt object
     class _Opt:
         pass
 
@@ -368,9 +449,18 @@ def eval_unos(args, device):
     opt.flow_smooth_weight = args.flow_smooth_weight
     opt.flow_consist_weight = args.flow_consist_weight
     opt.flow_diff_threshold = args.flow_diff_threshold
+    opt.trace = args.output_path or '.'
+
+    # Select train/eval model classes based on mode
+    if args.unos_mode == 'depthflow' or args.eval_flow:
+        TrainModel = Model_depthflow
+        EvalModel = Model_eval_depthflow
+    else:
+        TrainModel = Model_stereo
+        EvalModel = Model_eval_stereo
 
     # Load training model to get weights, then transfer to eval model
-    train_model = Model_stereo(opt).to(device)
+    train_model = TrainModel(opt).to(device)
 
     checkpoint = torch.load(args.restore_path, map_location=device)
     if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
@@ -382,7 +472,7 @@ def eval_unos(args, device):
     print('Restored UnOS model from: {} (step {})'.format(args.restore_path, step))
 
     # Create eval model and copy weights from training model
-    eval_model = Model_eval_stereo(opt).to(device)
+    eval_model = EvalModel(opt).to(device)
     eval_state = eval_model.state_dict()
     train_state = train_model.state_dict()
     for key in eval_state:
@@ -411,6 +501,7 @@ def eval_unos(args, device):
             eval_name, total_img_num))
 
         test_result_disp = []
+        test_result_flow = []
 
         for i in range(total_img_num):
             # Load 4 images: left_t, left_t1, right_t, right_t1
@@ -473,6 +564,15 @@ def eval_unos(args, device):
             else:
                 test_result_disp.append(0.0)
 
+            # Collect flow prediction (if available)
+            if args.eval_flow:
+                pred_flow = eval_model.pred_flow_optical
+                if isinstance(pred_flow, torch.Tensor) and pred_flow.numel() > 1:
+                    test_result_flow.append(
+                        pred_flow.squeeze().cpu().numpy())
+                else:
+                    test_result_flow.append(0.0)
+
         if len(test_result_disp) == 0:
             print('No images found for {}, skipping'.format(eval_name))
             continue
@@ -519,6 +619,39 @@ def eval_unos(args, device):
                 print(disp_err)
             except Exception as e:
                 print('Disp eval 2012 error: {}'.format(e))
+
+        # Optical flow evaluation
+        if args.eval_flow and len(test_result_flow) > 0:
+            from external_src.stereo_depth_completion.UnOS.eval.evaluate_flow import (
+                load_gt_flow_kitti, eval_flow_avg)
+
+            flow_opt = _Opt()
+            flow_opt.img_height = args.input_height
+            flow_opt.img_width = args.input_width
+            flow_opt.trace = args.output_path or '.'
+
+            if eval_name == 'kitti_2015':
+                flow_opt.gt_2015_dir = gt_dir
+                try:
+                    gt_flows, noc_masks = load_gt_flow_kitti('kitti', flow_opt)
+                    flow_err = eval_flow_avg(
+                        gt_flows, noc_masks, test_result_flow, flow_opt)
+                    print('\nOptical flow metrics (KITTI 2015):')
+                    print(flow_err)
+                except Exception as e:
+                    print('Flow eval 2015 error: {}'.format(e))
+
+            if eval_name == 'kitti_2012':
+                flow_opt.gt_2012_dir = gt_dir
+                try:
+                    gt_flows, noc_masks = load_gt_flow_kitti(
+                        'kitti_2012', flow_opt)
+                    flow_err = eval_flow_avg(
+                        gt_flows, noc_masks, test_result_flow, flow_opt)
+                    print('\nOptical flow metrics (KITTI 2012):')
+                    print(flow_err)
+                except Exception as e:
+                    print('Flow eval 2012 error: {}'.format(e))
 
 
 # ---------------------------------------------------------------------------

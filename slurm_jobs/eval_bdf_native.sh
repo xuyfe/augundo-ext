@@ -45,6 +45,7 @@ python -u -m stereo_depth_completion.run_stereo_depth_completion \
     --output_path "$RESULTS_DIR" \
     --bdf_model_name monodepth \
     --input_height 256 \
-    --input_width 512
+    --input_width 512 \
+    --eval_flow
 
 echo "Evaluation completed"
