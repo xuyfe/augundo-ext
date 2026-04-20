@@ -14,7 +14,7 @@ class PoseExpNet(nn.Module):
 
     Input : concatenation of target + source images -> (B, 6, H, W)
     Output: (B, 6) pose vector [tx, ty, tz, rx, ry, rz]
-            with translations (first 3) scaled by 0.01.
+            with translations (indices 0:3) scaled by 0.01.
     """
 
     def __init__(self):
@@ -68,5 +68,5 @@ class PoseExpNet(nn.Module):
         pose_final = pose_avg.view(-1, 6)
         # Scale translations by 0.01 (empirical facilitator for training)
         pose_final = torch.cat(
-            [pose_final[:, 0:3], 0.01 * pose_final[:, 3:6]], dim=1)
+            [0.01 * pose_final[:, 0:3], pose_final[:, 3:6]], dim=1)
         return pose_final
