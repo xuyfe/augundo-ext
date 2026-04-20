@@ -41,6 +41,11 @@ def _to_nchw(t):
     return t.permute(0, 3, 1, 2)
 
 
+def _flows_to_nhwc(flows):
+    """Convert a tuple of NCHW flow tensors to NHWC."""
+    return tuple(_to_nhwc(f) for f in flows)
+
+
 def _compute_occu_masks(optical_flows_rev, B, H, W, num_scales, device):
     """Compute occlusion masks by forward-warping ones with reverse flows."""
     occu_masks = []
@@ -114,10 +119,10 @@ class Model_flow(nn.Module):
         feature1 = self.feature_pyramid_flow(image1)
         feature2 = self.feature_pyramid_flow(image2)
 
-        optical_flows = self.pwc_flow.construct_model_pwc_full(
-            image1, image2, feature1, feature2)  # list of NHWC tensors
-        optical_flows_rev = self.pwc_flow.construct_model_pwc_full(
-            image2, image1, feature2, feature1)
+        optical_flows = _flows_to_nhwc(self.pwc_flow.construct_model_pwc_full(
+            image1, image2, feature1, feature2))
+        optical_flows_rev = _flows_to_nhwc(self.pwc_flow.construct_model_pwc_full(
+            image2, image1, feature2, feature1))
 
         occu_masks = _compute_occu_masks(
             optical_flows_rev, B, H, W, opt.num_scales, device)
@@ -194,8 +199,8 @@ class Model_depth(nn.Module):
         pred_depth = [1.0 / d for d in pred_disp]
         pred_poses = self.pose_net(image1, image2)
 
-        optical_flows_rev = self.pwc_flow.construct_model_pwc_full(
-            image2, image1, feature2_flow, feature1_flow)
+        optical_flows_rev = _flows_to_nhwc(self.pwc_flow.construct_model_pwc_full(
+            image2, image1, feature2_flow, feature1_flow))
 
         occu_masks = _compute_occu_masks(
             optical_flows_rev, B, H, W, opt.num_scales, device)
@@ -272,8 +277,8 @@ class Model_depthflow(nn.Module):
         pred_depth = [1.0 / d for d in pred_disp]
         pred_poses = self.pose_net(image1, image2)
 
-        optical_flows_rev = self.pwc_flow.construct_model_pwc_full(
-            image2, image1, feature2_flow, feature1_flow)
+        optical_flows_rev = _flows_to_nhwc(self.pwc_flow.construct_model_pwc_full(
+            image2, image1, feature2_flow, feature1_flow))
 
         # Also compute forward disparity for frame 2 (for inverse_warp_new)
         feature2_disp = self.feature_pyramid_disp(image2)
@@ -282,8 +287,8 @@ class Model_depthflow(nn.Module):
             image2, image2r, feature2_disp, feature2r_disp, opt,
             is_training=False, pwc_disp_net=self.pwc_disp)
 
-        optical_flows = self.pwc_flow.construct_model_pwc_full(
-            image1, image2, feature1_flow, feature2_flow)
+        optical_flows = _flows_to_nhwc(self.pwc_flow.construct_model_pwc_full(
+            image1, image2, feature1_flow, feature2_flow))
 
         occu_masks = _compute_occu_masks(
             optical_flows_rev, B, H, W, opt.num_scales, device)
@@ -448,8 +453,8 @@ class Model_eval_flow(nn.Module):
         feat1 = self.feature_pyramid_flow(input_1)
         feat2 = self.feature_pyramid_flow(input_2)
 
-        optical_flows = self.pwc_flow.construct_model_pwc_full(
-            input_1, input_2, feat1, feat2)
+        optical_flows = _flows_to_nhwc(self.pwc_flow.construct_model_pwc_full(
+            input_1, input_2, feat1, feat2))
 
         self.pred_flow_optical = optical_flows[0]  # finest scale NHWC
         self.pred_flow_rigid = torch.tensor(0.0)
@@ -488,8 +493,8 @@ class Model_eval_depth(nn.Module):
             input_1, input_1r, feat1_disp, feat1r_disp, opt,
             is_training=False, pwc_disp_net=self.pwc_disp)
         pred_poses = self.pose_net(input_1, input_2)
-        optical_flows = self.pwc_flow.construct_model_pwc_full(
-            input_1, input_2, feat1_flow, feat2_flow)
+        optical_flows = _flows_to_nhwc(self.pwc_flow.construct_model_pwc_full(
+            input_1, input_2, feat1_flow, feat2_flow))
 
         cam2pix, pix2cam = get_multi_scale_intrinsics(intrinsic, opt.num_scales)
         cam2pix = cam2pix.unsqueeze(0).to(input_1.device)
@@ -547,10 +552,10 @@ class Model_eval_depthflow(nn.Module):
 
         pred_poses = self.pose_net(input_1, input_2)
 
-        optical_flows = self.pwc_flow.construct_model_pwc_full(
-            input_1, input_2, feat1_flow, feat2_flow)
-        optical_flows_rev = self.pwc_flow.construct_model_pwc_full(
-            input_2, input_1, feat2_flow, feat1_flow)
+        optical_flows = _flows_to_nhwc(self.pwc_flow.construct_model_pwc_full(
+            input_1, input_2, feat1_flow, feat2_flow))
+        optical_flows_rev = _flows_to_nhwc(self.pwc_flow.construct_model_pwc_full(
+            input_2, input_1, feat2_flow, feat1_flow))
 
         cam2pix, pix2cam = get_multi_scale_intrinsics(intrinsic, opt.num_scales)
         cam2pix = cam2pix.unsqueeze(0).to(input_1.device)
