@@ -52,6 +52,7 @@ python -u -m external_src.stereo_depth_completion.UnOS.main \
     --flow_smooth_weight 10.0 \
     --flow_consist_weight 0.01 \
     --flow_diff_threshold 4.0 \
+    --disp_freeze_iters 10000 \
     --gt_2015_dir "$SENIOR_THESIS/augundo-ext/data/scene_flow_2015/training" \
     --gt_2012_dir "$SENIOR_THESIS/augundo-ext/data/stereo_2012/training"
 
