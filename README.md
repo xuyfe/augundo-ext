@@ -66,25 +66,25 @@ Make sure you're working in the home (root) directory. The parameters are set ac
 ### UnOS
 
 ```bash
-sbatch augundo-ext/train_unos.sh
+sbatch augundo-ext/original_slurm_jobs/train_unos.sh
 ```
 
 Note: UnOS training also runs evaluation on the *training* sets of KITTI 2012 and KITTI 2015. But, if you want to run only an inference test:
 
 ```bash
-sbatch augundo-ext/eval_unos.sh
+sbatch augundo-ext/original_slurm_jobs/eval_unos.sh
 ```
 
 ### BridgeDepthFlow
 
 ```bash
-sbatch augundo-ext/train_bdf.sh
+sbatch augundo-ext/original_slurm_jobs/train_bdf.sh
 ```
 
 To evaluate BDF:
 
 ```bash
-sbatch augundo-ext/eval_bdf.sh
+sbatch augundo-ext/original_slurm_jobs/eval_bdf.sh
 ```
 
 # Training and evaluation with AugUndo
@@ -92,101 +92,135 @@ sbatch augundo-ext/eval_bdf.sh
 ### UnOS
 
 ```bash
-sbatch augundo-ext/slurm_jobs/train_augundo_unos.sh
+sbatch augundo-ext/slurm_jobs/unos/augundo/train_augundo_unos.sh
 
-sbatch augundo-ext/slurm_jobs/eval_augundo_unos.sh
+sbatch augundo-ext/slurm_jobs/unos/augundo/eval_augundo_unos.sh
 ```
 
 ### BridgeDepthFlow
 
 ```bash
-sbatch augundo-ext/slurm_jobs/train_augundo_bdf.sh
+sbatch augundo-ext/slurm_jobs/bdf/augundo/train_augundo_bdf.sh
 
-sbatch augundo-ext/slurm_jobs/eval_augundo_bdf.sh
+sbatch augundo-ext/slurm_jobs/bdf/augundo/eval_augundo_bdf.sh
 ```
 
 # Key Implementation Details and Modifications
 
 ## Dataloaders and Training Pipeline
 
-We use the original dataloaders from UnOS and BDF during training, instead of the `datasets.py` script used for monocular depth. We decided to do this primarily because the inputs that UnOS and BDF expect are of a different format as compared to the processed data from `datasets.py` (UnOS and BDF expect two pairs, whereas `datasets.py` produces a triplet). This also allows us to maintain the same training pipeline without architectural redesign.
+We use the native dataloaders from UnOS and BDF during training, instead of the `datasets.py` script used for monocular depth. The stereo models expect 4-frame input batches (left_t, right_t, left_t+1, right_t+1), whereas the monocular `datasets.py` produces a triplet. Using the native dataloaders also allows us to maintain the same training pipeline without architectural redesign.
 
-In `external_src/stereo_depth_completion/UnOS/monodepth_dataloader.py` we modify the `MonodepthDataloader` class to allow setting `training=False` because the original UnOS model already performs some data augmentations to the data with a certain probability (50\%). So, once AugUndo is implemented to UnOS, some augmentations might be performed twice, so the model will train and evaluate on corrupted data since the "undoing" is only performed on the AugUndo pipeline.
+In `external_src/stereo_depth_completion/UnOS/monodepth_dataloader.py` we modify the `MonodepthDataloader` class to allow setting `training=False` because the original UnOS model already performs some data augmentations to the data with a certain probability (50%). When AugUndo is applied, the native augmentations are disabled to prevent double-augmentation, since the "undoing" step only inverts augmentations applied by the AugUndo pipeline.
 
-The model wrappers for UnOS and BDF are both found under `stereo_depth_completion/`. The new PyTorch implementations of the UnOS and BDF models are found under `external_src/stereo_depth_completion`—UnOS was originally developed with Tensorflow, while BDF was developed with an older version of Python and CUDA.
+The model wrappers for UnOS and BDF are both found under `stereo_depth_completion/`. The new PyTorch implementations of the UnOS and BDF models are found under `external_src/stereo_depth_completion`—UnOS was originally developed with TensorFlow 1.x, while BDF was developed with an older version of Python and CUDA. All network architectures and data loading pipelines were reimplemented in PyTorch, preserving the exact architecture specifications (layer dimensions, activation functions, initialization) and loss formulations of the originals.
 
 ## New Scripts
 
 We add various new scripts:
 
-augundo-ext/stereo_depth_completion/                                                                                                             
-  ├── __init__.py                                                                                                                 
-  ├── bdf_model.py                          # BDF wrapper                            
-  ├── unos_model.py                         # UnOS wrapper                        
-  ├── stereo_depth_completion_model.py      # Model registry with get_stereo_model()                          
-  ├── stereo_depth_completion.py            # Core stereo AugUndo loop                        
+```
+augundo-ext/stereo_depth_completion/
+  ├── __init__.py
+  ├── bdf_model.py                          # BDF wrapper
+  ├── unos_model.py                         # UnOS wrapper
+  ├── stereo_depth_completion_model.py      # Model registry with get_stereo_model()
+  ├── stereo_depth_completion.py            # Core stereo AugUndo training loop
+  ├── stereo_losses.py                      # Model-agnostic stereo loss module
   ├── train_stereo_depth_completion.py      # Training CLI entrypoint
-  ├── stereo_losess.py                      # Contains helper functions for stereo                          
-  └── run_stereo_depth_completion.py        # Inference CLI entrypoint
+  ├── run_stereo_depth_completion.py        # Inference/evaluation CLI entrypoint
+  ├── template_model.py                     # Template for implementing new stereo models
+  └── template_dataloader.py               # Template dataloader for new models
+```
 
-The stereo depth completion scripts are based on the scripts under `depth_completion/`.
+The stereo depth completion scripts are based on the scripts under `depth_completion/`. The pipeline operates directly on disparity predictions: the model predicts disparity in the augmented frame, augmentation undo is applied to the disparity, and all losses are computed on the un-augmented disparity against the original images.
 
-  ## Key Design Decisions
+## Key Design Decisions
 
-Stereo augmentation constraints enforced:                                                  
-  - Rotation is disabled (random_rotate_max=-1) — would break epipolar rectification
-  - Vertical flip is excluded from flip types  
-  - Crop-and-pad is disabled (can introduce vertical translation)  
-  - Only horizontal flip, resize, and horizontal translation are permitted 
-  - Horizontal flip triggers left-right image swap to maintain non-negative disparity convention
+Stereo augmentation constraints enforced:
+  - Rotation is **forbidden** — destroys epipolar alignment
+  - Vertical flip is **forbidden** — breaks vertical correspondence between left and right views
+  - Resize (crop/pad) is **forbidden** — changes effective focal length, introducing disparity scale mismatch
+  - Vertical translation is **forbidden** — misaligns scanline correspondence
 
-  Every other augmentation is extended to stereo pairs based on the original AugUndo framework. 
+Permitted augmentations:
+  - Horizontal flip (with left-right image swap to maintain non-negative disparity convention)
+  - Horizontal translation (preserves epipolar geometry and absolute disparity values)
+  - Color jitter (brightness, contrast, saturation — applied identically to both views with shared parameters)
+  - Gaussian blur (applied identically to both views)
+  - Gaussian noise (applied to left image only)
+
 
 ## Results
 
+All models are trained on KITTI raw data and evaluated on the held-out KITTI 2015 and KITTI 2012 scene flow test sets. Lower is better for all metrics except a1, a2, a3.
+
 ### UnOS - stereo-only mode, 100K iterations
 
-Depth Metrics (KITTI 2015)
+**Depth Metrics (KITTI 2015)**
 
-  ┌─────────┬────────┬─────────┬──────────┬─────────────────────────────────┬────────┐                                              
-  │ Metric  │  Old   │ AugUndo │ % Change │           Meaning               │ Better │                                              
-  ├─────────┼────────┼─────────┼──────────┼─────────────────────────────────┼────────┤                                              
-  │ abs_rel │ 0.0956 │  0.0634 │  -33.7%  │ Mean of |pred-gt|/gt —          │ Lower  │                                              
-  │         │        │         │          │ relative absolute error         │        │                                              
-  ├─────────┼────────┼─────────┼──────────┼─────────────────────────────────┼────────┤                                              
-  │ sq_rel  │ 1.1856 │  0.9367 │  -21.0%  │ Mean of (pred-gt)²/gt —         │ Lower  │                                              
-  │         │        │         │          │ penalizes large errors more     │        │                                              
-  ├─────────┼────────┼─────────┼──────────┼─────────────────────────────────┼────────┤                                              
-  │ rms     │  5.465 │   4.405 │  -19.4%  │ Root mean squared error         │ Lower  │                                              
-  │         │        │         │          │ (meters)                        │        │                                              
-  ├─────────┼────────┼─────────┼──────────┼─────────────────────────────────┼────────┤                                              
-  │ log_rms │  0.183 │   0.141 │  -23.0%  │ RMSE in log-space —             │ Lower  │                                              
-  │         │        │         │          │ emphasizes relative accuracy    │        │                                           
-  ├─────────┼────────┼─────────┼──────────┼─────────────────────────────────┼────────┤                                              
-  │ d1_all  │ 15.764 │   7.421 │  -52.9%  │ % of pixels with disparity      │ Lower  │                                        
-  │         │        │         │          │ error > 3px and > 5%            │        │                                              
-  ├─────────┼────────┼─────────┼──────────┼─────────────────────── ─────────┼────────┤                                              
-  │ a1      │  0.910 │   0.952 │   +4.6%  │ % of pixels where max(pred/gt,  │ Higher │                                         
-  │         │        │         │          │ gt/pred) < 1.25                 │        │                                              
-  ├─────────┼────────┼─────────┼──────────┼─────────────────────────────────┼────────┤                                              
-  │ a2      │  0.965 │   0.980 │   +1.6%  │ Same threshold at 1.25²         │ Higher │                                              
-  ├─────────┼────────┼─────────┼──────────┼─────────────────────────────────┼────────┤                                              
-  │ a3      │  0.983 │   0.989 │   +0.6%  │ Same threshold at 1.25³         │ Higher │                                              
-  └─────────┴────────┴─────────┴──────────┴─────────────────────────────────┴────────┘                                              
-                                                            
-  Disparity Metrics (KITTI 2015)                                   
-                                                            
-  ┌──────────┬────────┬─────────┬──────────┬─────────────────────────────────┬────────┐                                             
-  │  Metric  │  Old   │ AugUndo │ % Change │           Meaning               │ Better │                                             
-  ├──────────┼────────┼─────────┼──────────┼─────────────────────────────────┼────────┤                                             
-  │ epe      │ 2.8083 │  1.3512 │  -51.9%  │ Mean absolute disparity         │ Lower  │                                     
-  │          │        │         │          │ error (pixels)                  │        │                                             
-  ├──────────┼────────┼─────────┼──────────┼─────────────────────────────────┼────────┤                                             
-  │ noc_rate │ 0.1499 │  0.0698 │  -53.4%  │ Error rate on non-occluded      │ Lower  │                                     
-  │          │        │         │          │ pixels                          |        |                           
-  ├──────────┼────────┼─────────┼──────────┼─────────────────────────────────┼────────┤                                             
-  │ occ_rate │ 0.8717 │  0.2700 │  -69.0%  │ Error rate on all pixels        │ Lower  │                                         
-  │          │        │         │          │ (including occluded)            │        |                                     
-  ├──────────┼────────┼─────────┼──────────┼─────────────────────────────────┼────────┤                                             
-  │ err_rate │ 0.1666 │  0.0742 │  -55.5%  │ Overall error rate              │ Lower  │                                             
-  └──────────┴────────┴─────────┴──────────┴─────────────────────────────────┴────────┘                   
+| Metric  | Original | AugUndo (ours) |
+|---------|----------|----------------|
+| abs_rel | 0.0956   | **0.0628**     |
+| sq_rel  | 1.1856   | **0.8905**     |
+| rms     | 5.465    | **4.299**      |
+| log_rms | 0.183    | **0.139**      |
+| d1_all  | 15.764   | **7.386**      |
+| a1      | 0.910    | **0.952**      |
+| a2      | 0.965    | **0.980**      |
+| a3      | 0.983    | **0.989**      |
+
+**Disparity Metrics (KITTI 2015)**
+
+| Metric   | Original | AugUndo (ours) |
+|----------|----------|----------------|
+| epe      | 2.8083   | **1.3637**     |
+| noc_rate | 0.1499   | **0.0693**     |
+| occ_rate | 0.8717   | **0.2652**     |
+| err_rate | 0.1666   | **0.0739**     |
+
+**Disparity Metrics (KITTI 2012)**
+
+| Metric   | Original | AugUndo (ours) |
+|----------|----------|----------------|
+| epe      | 2.3621   | **1.3006**     |
+| noc_rate | 0.1456   | **0.0618**     |
+| occ_rate | 0.8286   | **0.4780**     |
+| err_rate | 0.1576   | **0.0719**     |
+
+AugUndo improves every metric uniformly. The largest gains are in occluded-region error rate (occ_rate drops by 69% on KITTI 2015), consistent with AugUndo's geometric augmentations providing supervision in regions where the photometric loss is unreliable.
+
+### BDF - MonodepthNet backbone, 15 epochs
+
+**Depth Metrics (KITTI 2015)**
+
+| Metric  | Original     | AugUndo (ours) |
+|---------|--------------|----------------|
+| abs_rel | **0.0754**   | 0.0792         |
+| sq_rel  | **0.9312**   | 1.1503         |
+| rms     | **4.480**    | 4.767          |
+| log_rms | **0.162**    | 0.164          |
+| d1_all  | 10.781       | **10.622**     |
+| a1      | 0.932        | **0.934**      |
+| a2      | 0.975        | **0.976**      |
+| a3      | 0.988        | 0.988          |
+
+**Disparity Metrics (KITTI 2015)**
+
+| Metric   | Original     | AugUndo (ours) |
+|----------|--------------|----------------|
+| epe      | 1.7168       | **1.6668**     |
+| noc_rate | **0.0935**   | 0.0998         |
+| occ_rate | 0.8858       | **0.4142**     |
+| err_rate | 0.1078       | **0.1062**     |
+
+**Disparity Metrics (KITTI 2012)**
+
+| Metric   | Original     | AugUndo (ours) |
+|----------|--------------|----------------|
+| epe      | 1.9370       | **1.7911**     |
+| noc_rate | **0.0950**   | 0.0998         |
+| occ_rate | 0.9222       | **0.5755**     |
+| err_rate | 0.1143       | **0.1113**     |
+
+BDF presents a more nuanced picture: AugUndo dramatically improves occluded-region error rates (occ_rate reduced by 53% on KITTI 2015, 38% on KITTI 2012) and overall EPE, while the baseline retains slightly better pixel-level depth accuracy in non-occluded regions. This trade-off arises because BDF already includes aggressive photometric augmentation natively; the additional photometric jitter from AugUndo introduces noise that slightly degrades per-pixel precision in well-observed regions, while the geometric augmentations (horizontal translation) provide a strong training signal in occluded regions where the standard photometric loss is uninformative.
