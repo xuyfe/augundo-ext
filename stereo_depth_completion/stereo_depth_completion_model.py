@@ -1,5 +1,6 @@
 from .bdf_model import BDFModel
 from .unos_model import UnOSModel
+from .template_model import TemplateStereoModel
 
 
 def get_stereo_model(name, config):
@@ -8,12 +9,12 @@ def get_stereo_model(name, config):
 
     Arg(s):
         name : str
-            model name ('bdf' or 'unos')
+            model name ('bdf', 'unos', or 'template')
         config : dict
             model-specific configuration arguments
 
     Returns:
-        BDFModel or UnOSModel : instantiated model wrapper
+        BDFModel, UnOSModel, or TemplateStereoModel : instantiated model wrapper
     '''
 
     name = name.lower()
@@ -42,6 +43,13 @@ def get_stereo_model(name, config):
             num_scales=config.get('num_scales', 4),
             device=config.get('device', None),
         )
+    elif name == 'template':
+        return TemplateStereoModel(
+            input_height=config.get('input_height', 256),
+            input_width=config.get('input_width', 512),
+            num_scales=config.get('num_scales', 4),
+            device=config.get('device', None),
+        )
     else:
         raise ValueError(
-            'Unknown stereo model: "{}". Supported models: "bdf", "unos".'.format(name))
+            'Unknown stereo model: "{}". Supported models: "bdf", "unos", "template".'.format(name))
